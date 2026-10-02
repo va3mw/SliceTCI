@@ -168,6 +168,22 @@ func (a *App) SetTXDevice(name string) {
 	a.log.Log(logx.Info, "app", "DAX TX device: %s (applies on next key)", orAuto(name))
 }
 
+// SetAudioPath picks "radio" (direct VITA-49) or "windows" (DAX sound devices).
+func (a *App) SetAudioPath(path string) error {
+	if path != config.PathRadio && path != config.PathWindows {
+		return fmt.Errorf("unknown audio path %q", path)
+	}
+	if a.cfg.Get().AudioPath == path {
+		return nil
+	}
+	a.cfg.Update(func(c *config.Config) { c.AudioPath = path })
+	label := map[string]string{config.PathRadio: "direct from the radio", config.PathWindows: "Windows DAX devices"}[path]
+	a.log.Log(logx.Info, "app", "audio path: %s", label)
+	a.bridge.RestartAudio()
+	a.pushStatus()
+	return nil
+}
+
 func orAuto(s string) string {
 	if s == "" {
 		return "auto"

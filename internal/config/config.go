@@ -11,6 +11,12 @@ import (
 // MaxChannels is the hard upper bound on TCI channels (one port per slice).
 const MaxChannels = 8
 
+// Audio paths.
+const (
+	PathRadio   = "radio"   // DAX streams straight from the radio (VITA-49 over UDP)
+	PathWindows = "windows" // SmartSDR DAX virtual sound devices via WASAPI
+)
+
 type Channel struct {
 	Slice    string `json:"slice"`     // slice letter A..H
 	Port     int    `json:"port"`      // TCI WebSocket port
@@ -24,7 +30,8 @@ type Config struct {
 	Station        string    `json:"station"`      // SmartSDR station name to bind to
 	ChannelCount   int       `json:"channel_count"`
 	Channels       []Channel `json:"channels"`
-	TXDevice       string    `json:"tx_device"` // render device friendly name; "" = auto (DAX Audio TX)
+	AudioPath      string    `json:"audio_path"` // "radio" (VITA-49 direct) or "windows" (DAX sound devices)
+	TXDevice       string    `json:"tx_device"`  // render device friendly name; "" = auto (DAX Audio TX)
 	UnkeyTimeoutMs int       `json:"unkey_timeout_ms"`
 	ProtocolName   string    `json:"protocol_name"`
 	SetSliceDAX    bool      `json:"set_slice_dax"`
@@ -64,6 +71,9 @@ func (c *Config) normalize() {
 	}
 	if c.ProtocolName == "" {
 		c.ProtocolName = "ExpertSDR3"
+	}
+	if c.AudioPath != PathWindows {
+		c.AudioPath = PathRadio
 	}
 }
 

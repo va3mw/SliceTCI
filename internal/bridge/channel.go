@@ -37,7 +37,7 @@ type Channel struct {
 	nextID    int
 	last      view
 	pins      map[string]pin
-	capture   *audio.Stream
+	capture   stopper
 	listenErr string
 	rxPeak    float32
 	daxSetFor int // slice index we last set dax= on
@@ -247,19 +247,36 @@ func (ch *Channel) updateCapture() {
 			need = true
 		}
 	}
-	var stop *audio.Stream
+	var stop stopper
 	if need && ch.capture == nil {
-		ch.lg.Info("starting RX audio from %s", deviceLabel(ch.cfg.RXDevice, fmt.Sprintf("auto: DAX Audio RX %d", ch.cfg.DAX)))
-		ch.capture = audio.StartCapture(ch.lg, ch.cfg.RXDevice, audio.AutoRXPattern(ch.cfg.DAX), ch.onRX)
+		if ch.b.cfg.Get().AudioPath == config.PathWindows {
+			ch.lg.Info("starting RX audio from Windows device %s", deviceLabel(ch.cfg.RXDevice, fmt.Sprintf("auto: DAX Audio RX %d", ch.cfg.DAX)))
+			ch.capture = audio.StartCapture(ch.lg, ch.cfg.RXDevice, audio.AutoRXPattern(ch.cfg.DAX), ch.onRX)
+		} else {
+			ch.lg.Info("starting RX audio direct from the radio (DAX channel %d)", ch.cfg.DAX)
+			ch.capture = startDirectRX(ch.b.radio, ch.lg, ch.cfg.DAX, ch.onRX)
+		}
 	} else if !need && ch.capture != nil {
 		stop = ch.capture
 		ch.capture = nil
 	}
 	ch.mu.Unlock()
 	if stop != nil {
-		ch.lg.Info("no clients want RX audio; closing DAX RX device")
+		ch.lg.Info("no clients want RX audio; closing the RX audio stream")
 		go stop.Stop()
 	}
+}
+
+// restartCapture reopens RX audio, e.g. after the audio path setting changed.
+func (ch *Channel) restartCapture() {
+	ch.mu.Lock()
+	old := ch.capture
+	ch.capture = nil
+	ch.mu.Unlock()
+	if old != nil {
+		old.Stop()
+	}
+	ch.updateCapture()
 }
 
 func deviceLabel(name, auto string) string {

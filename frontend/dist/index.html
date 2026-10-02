@@ -96,8 +96,15 @@ tr:last-child td { border-bottom: none; }
       </div>
     </section>
     <section>
-      <h2>Transmit &amp; options</h2>
+      <h2>Audio, transmit &amp; options</h2>
       <div class="row">
+        <label for="audioPath">Audio path</label>
+        <select id="audioPath">
+          <option value="radio">Direct from radio (no DAX needed)</option>
+          <option value="windows">Windows DAX devices (SmartSDR DAX)</option>
+        </select>
+      </div>
+      <div class="row" style="margin-top:10px">
         <label for="txDev">DAX TX device</label>
         <select id="txDev" style="min-width:260px"></select>
       </div>
@@ -122,7 +129,7 @@ tr:last-child td { border-bottom: none; }
     </div>
     <table>
       <thead><tr>
-        <th>#</th><th>Slice</th><th>TCI port</th><th>DAX ch</th><th>DAX RX device</th><th></th>
+        <th>#</th><th>Slice</th><th>TCI port</th><th>DAX ch</th><th>RX audio source</th><th></th>
         <th>Status</th><th>Frequency</th><th>Mode</th><th>RX</th><th>Clients</th>
       </tr></thead>
       <tbody id="chanBody"></tbody>
@@ -220,7 +227,9 @@ function renderRadioPickers(s) {
 }
 
 // ---------- channels ----------
+const isWindowsPath = () => status && status.config.audio_path === "windows";
 function deviceOptions(selected, dax) {
+  if (!isWindowsPath()) return [[selected, `Radio stream (DAX ch ${dax})`]];
   const items = [["", `Auto (DAX Audio RX ${dax})`]].concat(devices.capture.map(d => [d.name, d.name]));
   if (selected && !devices.capture.some(d => d.name === selected)) items.push([selected, selected + " (missing)"]);
   return items;
@@ -249,6 +258,7 @@ function buildChannelRows() {
     const q = f => tr.querySelector(`[data-f=${f}]`);
     q("slice").value = c.slice; q("port").value = c.port; q("dax").value = c.dax;
     setOptions(q("rx"), deviceOptions(c.rx_device, c.dax), c.rx_device);
+    q("rx").disabled = !isWindowsPath();
     const apply = tr.querySelector("[data-a=apply]");
     const read = () => ({ slice: q("slice").value, port: +q("port").value, dax: +q("dax").value, rx_device: q("rx").value });
     const dirty = () => {
@@ -304,10 +314,17 @@ function renderOptions(s, force) {
   }
   $("logTraffic").checked = c.log_traffic;
   $("chanCount").value = c.channel_count;
+  if (ae !== $("audioPath")) $("audioPath").value = c.audio_path;
   if (ae !== $("txDev")) {
-    const items = [["", "Auto (DAX Audio TX)"]].concat(devices.render.map(d => [d.name, d.name]));
-    if (c.tx_device && !devices.render.some(d => d.name === c.tx_device)) items.push([c.tx_device, c.tx_device + " (missing)"]);
+    let items;
+    if (c.audio_path === "windows") {
+      items = [["", "Auto (DAX Audio TX)"]].concat(devices.render.map(d => [d.name, d.name]));
+      if (c.tx_device && !devices.render.some(d => d.name === c.tx_device)) items.push([c.tx_device, c.tx_device + " (missing)"]);
+    } else {
+      items = [[c.tx_device, "Radio stream (dax_tx)"]];
+    }
     setOptions($("txDev"), items, c.tx_device);
+    $("txDev").disabled = c.audio_path !== "windows";
   }
 }
 
@@ -362,6 +379,11 @@ async function init() {
   $("btnDisconnect").onclick = () => call("Disconnect");
   $("stationSel").onchange = e => call("SelectStation", e.target.value);
   $("txDev").onchange = e => call("SetTXDevice", e.target.value);
+  $("audioPath").onchange = async e => {
+    await call("SetAudioPath", e.target.value).catch(() => {});
+    status = await call("GetStatus");
+    renderOptions(status, false); buildChannelRows(); updateChannelStatus();
+  };
   $("chanCount").onchange = async e => {
     await call("SetChannelCount", +e.target.value).catch(() => {});
     onStatus(await call("GetStatus"));

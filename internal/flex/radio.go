@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/va3mw/FlexTCI/internal/logx"
@@ -30,6 +31,7 @@ type Slice struct {
 	XITOn        bool     `json:"xit_on"`
 	XITFreq      int      `json:"xit_freq"`
 	ModeList     []string `json:"mode_list"`
+	SampleRate   int      `json:"sample_rate"` // DAX audio rate of this slice
 }
 
 // Station is a GUI client (SmartSDR, Maestro, ...) connected to the radio.
@@ -129,6 +131,11 @@ type Radio struct {
 	boundName   string
 	lastRx      time.Time
 	stop        chan struct{}
+
+	udp     *net.UDPConn
+	udpPort int
+	epoch   uint64
+	streams map[uint32]*stream
 }
 
 func NewRadio(l *logx.Logger, onUpdate func()) *Radio {
@@ -192,8 +199,16 @@ func (r *Radio) session(ip string, stop chan struct{}) error {
 	if err != nil {
 		return err
 	}
+	udp, udpPort, err := r.openUDP()
+	if err != nil {
+		r.log.Error("%v (audio direct from the radio will not work)", err)
+	} else {
+		go r.udpLoop(udp)
+	}
 	r.mu.Lock()
 	r.conn = conn
+	r.udp, r.udpPort = udp, udpPort
+	r.streams = map[uint32]*stream{}
 	r.pending = map[uint32]replyFn{}
 	r.slices = map[int]*Slice{}
 	r.stations = map[uint32]*Station{}
@@ -206,9 +221,14 @@ func (r *Radio) session(ip string, stop chan struct{}) error {
 	defer func() {
 		close(done)
 		conn.Close()
+		if udp != nil {
+			udp.Close()
+		}
 		r.mu.Lock()
 		r.connected = false
 		r.conn = nil
+		r.udp = nil
+		r.streams = map[uint32]*stream{}
 		r.boundHandle, r.boundName = 0, ""
 		r.mu.Unlock()
 		r.notify()
@@ -266,13 +286,23 @@ func (r *Radio) handleLine(line string) {
 		r.mu.Lock()
 		r.myHandle = uint32(h)
 		r.connected = true
+		udpPort := r.udpPort
 		r.mu.Unlock()
+		atomic.AddUint64(&r.epoch, 1)
 		r.log.Info("connected, our client handle 0x%08X", h)
 		// Interlock status arrives with "sub tx all"; there is no interlock subscription.
 		for _, s := range []string{"sub client all", "sub slice all", "sub tx all", "sub radio all"} {
 			r.Command(s, nil)
 		}
 		r.Command("info", r.onInfo)
+		if udpPort != 0 {
+			// Tell the radio where to send our DAX audio streams (LAN clients).
+			r.Command(fmt.Sprintf("client udpport %d", udpPort), func(code uint32, _ string) {
+				if code == 0 {
+					r.log.Info("audio streams will arrive on UDP %d", udpPort)
+				}
+			})
+		}
 		r.notify()
 	case 'R':
 		r.handleReply(line[1:])
@@ -405,6 +435,9 @@ func (r *Radio) handleStatus(body string) bool {
 		h, _ := strconv.ParseUint(strings.TrimPrefix(fields[1], "0x"), 16, 32)
 		r.applyClient(uint32(h), fields[2], ParseKV(strings.Join(fields[3:], " ")))
 		return true
+	case "stream":
+		r.applyStream(fields)
+		return true
 	case "transmit":
 		if len(fields) < 2 || !strings.Contains(fields[1], "=") {
 			return false // transmit band ... sub-objects
@@ -498,6 +531,8 @@ func (r *Radio) applySlice(idx int, kv map[string]string) {
 			s.Letter = v
 		case "mode_list":
 			s.ModeList = strings.Split(v, ",")
+		case "sample_rate":
+			s.SampleRate, _ = strconv.Atoi(v)
 		case "rit_on":
 			s.RITOn = v == "1"
 		case "rit_freq":

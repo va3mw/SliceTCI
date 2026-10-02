@@ -1,18 +1,22 @@
 # FlexTCI
 
-A TCI (Transceiver Control Interface) server for FlexRadio on Windows. TCI clients such as WSJT-X connect over a WebSocket on localhost. FlexTCI controls the slice through the SmartSDR TCP API and carries the audio through the DAX virtual sound cards. It is the "one connection instead of CAT + DAX" setup from the TCI requirements draft (v0.1), built as a standalone bridge.
+A TCI (Transceiver Control Interface) server for FlexRadio on Windows. TCI clients such as WSJT-X connect over a WebSocket on localhost. FlexTCI controls the slice through the SmartSDR TCP API. It takes the audio **directly from the radio** as VITA-49 DAX streams over UDP, so neither SmartSDR DAX nor the Windows DAX sound devices are needed. It is the "one connection instead of CAT + DAX" setup from the TCI requirements draft (v0.1), built as a standalone bridge.
 
 ## How it works
 
 ```
-WSJT-X ──ws://127.0.0.1:50001──┐                       ┌── TCP 4992 ── radio (slice A: freq, mode, PTT…)
-WSJT-X ──ws://127.0.0.1:50002──┤  FlexTCI (one port   ├── DAX Audio RX 1/2/… (capture, per channel)
-Log4OM ──ws://127.0.0.1:50001──┘   per slice)          └── DAX Audio TX       (render, whoever is keyed)
+WSJT-X ──ws://127.0.0.1:50001──┐                      ┌── TCP 4992 ── radio API (slice A: freq, mode, PTT…)
+WSJT-X ──ws://127.0.0.1:50002──┤  FlexTCI (one port  ├── UDP  ◄──── dax_rx stream per channel (VITA-49)
+Log4OM ──ws://127.0.0.1:50001──┘   per slice)         └── UDP  ────► dax_tx stream (whoever is keyed)
 ```
+
+**Audio path** (in Options):
+* **Direct from radio** (default). FlexTCI registers a UDP port with `client udpport` and opens a `dax_rx` stream for each channel's DAX channel. It opens a `dax_tx` stream for transmit, taking DAX TX ownership with `stream set … tx=1`. RX arrives as float32 stereo at the slice's `sample_rate` (24 kHz on a 6600M) and is resampled to whatever the TCI client asked for. TX goes out in 128-frame packets paced to the TX slice's rate. The streams are recreated after a reconnect. Windows Firewall must allow FlexTCI to receive UDP.
+* **Windows DAX devices**. This is the original path through SmartSDR DAX's "DAX Audio RX n" / "DAX Audio TX" sound devices, kept as a fallback.
 
 * **One TCI port per slice.** Each channel is a port, a slice letter, a DAX channel and a DAX RX device. The defaults are Slice A → port 50001 → DAX 1, Slice B → 50002 → DAX 2, and so on. Every client sees a single transceiver (`trx 0`), so each WSJT-X instance uses **TCI Client RX1** on its own port.
 * You can run 1 to 8 channels (the default is 1). Several clients can share a port (for example WSJT-X and a logger on the same slice), and they are kept in sync.
-* SmartSDR and SmartSDR DAX must be running. FlexTCI binds to the SmartSDR station you pick, so in multiFLEX "Slice A" means *that station's* Slice A.
+* SmartSDR (or another GUI station) must be running, because it owns the slices. SmartSDR DAX is only needed for the Windows audio path. FlexTCI binds to the station you pick, so in multiFLEX "Slice A" means *that station's* Slice A.
 * When a client connects, the slice's DAX channel is set to match its assignment. You can turn this off with **Set slice DAX channel**.
 
 ## WSJT-X setup
@@ -67,7 +71,8 @@ Settings are stored in `%APPDATA%\FlexTCI\config.json`.
 main.go, app.go          Wails app and UI bindings
 frontend/dist/index.html UI (plain HTML/JS, no npm)
 internal/flex            radio discovery (UDP 4992) and SmartSDR TCP API client
-internal/audio           WASAPI capture/render (go-wca), resampler, FIFO
+internal/vita            VITA-49 DAX audio packets (parse/build)
+internal/audio           WASAPI capture/render (go-wca, fallback path), resampler, FIFO
 internal/tci             TCI text/binary protocol, sample formats, mode map
 internal/bridge          channels, clients, view diffing, TX arbitration and safety
 internal/logx, config    logging and persisted settings

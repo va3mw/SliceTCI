@@ -16,6 +16,7 @@ import (
 	"github.com/va3mw/FlexTCI/internal/flex"
 	"github.com/va3mw/FlexTCI/internal/logx"
 	"github.com/va3mw/FlexTCI/internal/tci"
+	"github.com/va3mw/FlexTCI/internal/vita"
 )
 
 // fakeRadio speaks just enough of the SmartSDR API for the bridge. Status
@@ -26,6 +27,56 @@ type fakeRadio struct {
 	mu   sync.Mutex
 	conn net.Conn
 	seen []string
+
+	// VITA-49: udp is the radio's own port (what the bridge sends TX to);
+	// clientPort is where the bridge asked for streams ("client udpport").
+	udp        *net.UDPConn
+	clientPort int
+	txPackets  chan vita.Packet
+	rxStop     chan struct{}
+}
+
+const (
+	fakeRXStream = 0x04000008
+	fakeTXStream = 0x84000000
+)
+
+// sendRX streams 24 kHz float stereo DAX audio (constant 0.25) to the bridge
+// at the real-time packet rate until rxStop closes.
+func (f *fakeRadio) sendRX() {
+	dst := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: f.clientPort}
+	samples := make([]float32, vita.TXFrames*2)
+	for i := range samples {
+		samples[i] = 0.25
+	}
+	t := time.NewTicker(time.Duration(vita.TXFrames) * time.Second / 24000)
+	defer t.Stop()
+	var n uint8
+	for {
+		select {
+		case <-f.rxStop:
+			return
+		case <-t.C:
+		}
+		f.udp.WriteToUDP(vita.BuildAudio(fakeRXStream, n, vita.ClassFloat24k, samples), dst)
+		n++
+	}
+}
+
+func (f *fakeRadio) readTX() {
+	buf := make([]byte, 4096)
+	for {
+		n, _, err := f.udp.ReadFromUDP(buf)
+		if err != nil {
+			return
+		}
+		if p, err := vita.Parse(append([]byte(nil), buf[:n]...)); err == nil {
+			select {
+			case f.txPackets <- p:
+			default:
+			}
+		}
+	}
 }
 
 func (f *fakeRadio) sent(cmd string) bool {
@@ -53,8 +104,15 @@ func newFakeRadio(t *testing.T) *fakeRadio {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fakeRadio{ln: ln, cmds: make(chan string, 1000)}
+	udp, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeRadio{ln: ln, cmds: make(chan string, 1000), udp: udp, txPackets: make(chan vita.Packet, 10000), rxStop: make(chan struct{})}
+	t.Cleanup(func() { close(f.rxStop); udp.Close(); ln.Close() })
+	flex.VitaPort = udp.LocalAddr().(*net.UDPAddr).Port
 	go f.serve()
+	go f.readTX()
 	return f
 }
 
@@ -77,10 +135,20 @@ func (f *fakeRadio) serve() {
 	for sc.Scan() {
 		seq, cmd, _ := strings.Cut(sc.Text(), "|")
 		seq = strings.TrimPrefix(seq, "C")
-		switch cmd {
-		case "info":
+		switch {
+		case strings.HasPrefix(cmd, "client udpport "):
+			fmt.Sscan(strings.TrimPrefix(cmd, "client udpport "), &f.clientPort)
+			send("R" + seq + "|0|")
+		case cmd == "stream create type=dax_rx dax_channel=1":
+			send("R" + seq + fmt.Sprintf("|0|%08X", fakeRXStream))
+			send(fmt.Sprintf("S0000ABCD|stream 0x%08X type=dax_rx dax_channel=1 slice=A client_handle=0x0000ABCD gain=50", fakeRXStream))
+			go f.sendRX()
+		case cmd == "stream create type=dax_tx":
+			send("R" + seq + fmt.Sprintf("|0|%08X", fakeTXStream))
+			send(fmt.Sprintf("S0000ABCD|stream 0x%08X type=dax_tx client_handle=0x0000ABCD tx=1", fakeTXStream))
+		case cmd == "info":
 			send("R" + seq + `|0|model="FLEX-6600M",chassis_serial="1234",name="RXb-VA3MW",callsign="VA3MW"`)
-		case "sub interlock all", "client program FlexTCI":
+		case cmd == "sub interlock all" || cmd == "client program FlexTCI":
 			send("R" + seq + "|500000A3|Invalid subscription object name")
 		default:
 			send("R" + seq + "|0|")
@@ -157,6 +225,7 @@ type tciClient struct {
 	conn   *websocket.Conn
 	text   chan string
 	chrono chan tci.Header
+	rx     chan []float32
 }
 
 func dialTCI(t *testing.T, host string, port int) *tciClient {
@@ -164,7 +233,7 @@ func dialTCI(t *testing.T, host string, port int) *tciClient {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := &tciClient{conn: conn, text: make(chan string, 1000), chrono: make(chan tci.Header, 1000)}
+	c := &tciClient{conn: conn, text: make(chan string, 1000), chrono: make(chan tci.Header, 1000), rx: make(chan []float32, 1000)}
 	go func() {
 		for {
 			mt, data, err := conn.ReadMessage()
@@ -175,6 +244,11 @@ func dialTCI(t *testing.T, host string, port int) *tciClient {
 				c.text <- string(data)
 			} else if h, err := tci.ReadHeader(data); err == nil && h.Type == tci.StreamTXChrono {
 				c.chrono <- h
+			} else if err == nil && h.Type == tci.StreamRXAudio {
+				select {
+				case c.rx <- tci.Decode(h, data[tci.HeaderSize:]):
+				default:
+				}
 			}
 		}
 	}()
@@ -342,4 +416,101 @@ loop:
 	}
 	c.conn.UnderlyingConn().Close() // simulate a crash
 	radio.expect(t, "xmit 0", 3*time.Second)
+}
+
+// TestDirectAudio checks the no-DAX path: RX audio arrives as VITA-49 from
+// the radio and reaches the TCI client; TCI TX audio leaves as VITA-49
+// dax_tx packets at the slice rate.
+func TestDirectAudio(t *testing.T) {
+	dir := t.TempDir()
+	radio := newFakeRadio(t)
+	flex.APIPort = radio.port()
+	const tciPort = 50952
+	cfg := config.LoadFrom(filepath.Join(dir, "config.json"))
+	cfg.Update(func(c *config.Config) {
+		c.Channels[0].Port = tciPort
+		c.AutoConnect = false
+		c.AudioPath = config.PathRadio
+	})
+	l := logx.New(dir)
+	defer l.Close()
+	l.OnEntry(func(e logx.Entry) { t.Logf("%s %-5s %-9s %s", e.Time, e.Level, e.Source, e.Msg) })
+	b := New(l, cfg, nil)
+	b.Start()
+	defer b.Shutdown()
+	if err := b.Connect("", "127.0.0.1"); err != nil {
+		t.Fatal(err)
+	}
+	radio.expect(t, "client bind client_id=AAAA-BBBB", 3*time.Second)
+	if !radio.sent(fmt.Sprintf("client udpport %d", radio.clientPort)) || radio.clientPort == 0 {
+		t.Fatal("bridge never sent client udpport")
+	}
+
+	c := dialTCI(t, "127.0.0.1", tciPort)
+	c.expect(t, "ready;", 3*time.Second)
+	c.send("AUDIO_START:0;")
+	radio.expect(t, "stream create type=dax_rx dax_channel=1", 2*time.Second)
+
+	// RX: 24 kHz 0.25 from the radio -> 48 kHz stereo float frames of 2048 samples.
+	deadline := time.After(3 * time.Second)
+	good := 0
+	for good < 5 {
+		select {
+		case s := <-c.rx:
+			if len(s) != 2048 {
+				t.Fatalf("rx frame of %d samples", len(s))
+			}
+			if v := s[len(s)-1]; v > 0.24 && v < 0.26 {
+				good++
+			}
+		case <-deadline:
+			t.Fatalf("only %d good RX frames", good)
+		}
+	}
+
+	// TX: key with TCI audio, answer chronos with 0.1, expect dax_tx packets.
+	c.send("TRX:0,true,tci;")
+	radio.expect(t, "stream create type=dax_tx", 2*time.Second)
+	radio.expect(t, "xmit 1", time.Second)
+	for len(radio.txPackets) > 0 {
+		<-radio.txPackets
+	}
+	stop := time.After(time.Second)
+	start := time.Now()
+	pkts, okVals := 0, 0
+loop:
+	for {
+		select {
+		case h := <-c.chrono:
+			buf := make([]float32, h.Length)
+			for i := range buf {
+				buf[i] = 0.1
+			}
+			h.Type = tci.StreamTXAudio
+			c.conn.WriteMessage(websocket.BinaryMessage, tci.Encode(h, buf))
+		case p := <-radio.txPackets:
+			if p.StreamID != fakeTXStream || p.PacketClass != vita.ClassFloat24k || p.OUI != vita.FlexOUI {
+				t.Fatalf("bad TX packet %+v", p)
+			}
+			s := vita.Stereo(p)
+			if len(s) != vita.TXFrames*2 {
+				t.Fatalf("TX packet has %d samples", len(s))
+			}
+			pkts++
+			if v := s[len(s)-1]; v > 0.09 && v < 0.11 {
+				okVals++
+			}
+		case <-stop:
+			break loop
+		}
+	}
+	rate := float64(pkts) / time.Since(start).Seconds()
+	if rate < 150 || rate > 220 { // 24000/128 = 187.5 packets/s
+		t.Errorf("TX packet rate %.1f/s", rate)
+	}
+	if okVals < pkts/2 {
+		t.Errorf("only %d of %d TX packets carried the client's audio", okVals, pkts)
+	}
+	c.send("TRX:0,false;")
+	radio.expect(t, "xmit 0", time.Second)
 }

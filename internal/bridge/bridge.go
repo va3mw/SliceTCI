@@ -63,10 +63,14 @@ type Bridge struct {
 func New(l *logx.Logger, cfg *config.Store, onUI func()) *Bridge {
 	b := &Bridge{log: l, lg: l.Src("bridge"), cfg: cfg, onUI: onUI, quit: make(chan struct{})}
 	b.fifo = audio.NewFifo(audio.Rate) // up to 1 s of TX audio
-	b.newRender = func(device string, pull func([]float32)) stopper {
-		return audio.StartRender(l.Src("dax-tx"), device, audio.AutoTX, pull)
-	}
 	b.radio = flex.NewRadio(l, b.onRadioUpdate)
+	dtx := newDirectTX(b.radio, l.Src("dax-tx"))
+	b.newRender = func(device string, pull func([]float32)) stopper {
+		if cfg.Get().AudioPath == config.PathWindows {
+			return audio.StartRender(l.Src("dax-tx"), device, audio.AutoTX, pull)
+		}
+		return dtx.start(pull)
+	}
 	b.disc = flex.NewDiscovery(l, b.notifyUI)
 	return b
 }
@@ -140,6 +144,14 @@ func (b *Bridge) SelectStation(name string) {
 	b.releaseAll("station changed")
 	b.cfg.Update(func(c *config.Config) { c.Station = name })
 	b.radio.SetStation(name)
+}
+
+// RestartAudio reopens every channel's RX audio (after the audio path changed).
+// TX picks up the new path on the next key.
+func (b *Bridge) RestartAudio() {
+	for _, ch := range b.channelList() {
+		ch.restartCapture()
+	}
 }
 
 // ApplyChannels starts, stops or restarts listeners to match the config.
