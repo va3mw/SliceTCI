@@ -2,6 +2,8 @@
 
 A TCI (Transceiver Control Interface) server for FlexRadio on Windows. TCI clients such as WSJT-X connect over a WebSocket on localhost. FlexTCI controls the slice through the SmartSDR TCP API. It takes the audio **directly from the radio** as VITA-49 DAX streams over UDP, so neither SmartSDR DAX nor the Windows DAX sound devices are needed. It is the "one connection instead of CAT + DAX" setup from the TCI requirements draft (v0.1), built as a standalone bridge.
 
+![FlexTCI 0.3.0 with WSJT-X 3.0 decoding FT8 on a FLEX-6600M, audio direct from the radio](FlexTCIserver.png)
+
 ## How it works
 
 ```
