@@ -138,6 +138,75 @@ func (a *App) ResetChannel(i int) error {
 	return a.UpdateChannel(i, config.DefaultChannel(i))
 }
 
+// AddChannel appends a channel using the first free slice letter, port and
+// DAX channel.
+func (a *App) AddChannel() error {
+	c := a.cfg.Get()
+	if c.ChannelCount >= config.MaxChannels {
+		return fmt.Errorf("at most %d channels", config.MaxChannels)
+	}
+	used := func(f func(config.Channel) bool) bool {
+		for i := 0; i < c.ChannelCount; i++ {
+			if f(c.Channels[i]) {
+				return true
+			}
+		}
+		return false
+	}
+	var nc config.Channel
+	for i := 0; i < config.MaxChannels; i++ {
+		l := string(rune('A' + i))
+		if !used(func(x config.Channel) bool { return x.Slice == l }) {
+			nc = config.DefaultChannel(i)
+			break
+		}
+	}
+	for used(func(x config.Channel) bool { return x.Port == nc.Port }) {
+		nc.Port++
+	}
+	for d := 1; d <= 8; d++ {
+		if !used(func(x config.Channel) bool { return x.DAX == d }) {
+			nc.DAX = d
+			break
+		}
+	}
+	n := c.ChannelCount
+	a.cfg.Update(func(c *config.Config) { c.Channels[n] = nc; c.ChannelCount = n + 1 })
+	a.log.Log(logx.Info, "app", "added channel: Slice %s, port %d, DAX %d", nc.Slice, nc.Port, nc.DAX)
+	a.bridge.ApplyChannels()
+	return nil
+}
+
+// RemoveChannel deletes channel i; later channels move up one place.
+func (a *App) RemoveChannel(i int) error {
+	c := a.cfg.Get()
+	if c.ChannelCount <= 1 {
+		return fmt.Errorf("at least one channel is required")
+	}
+	if i < 0 || i >= c.ChannelCount {
+		return fmt.Errorf("bad channel %d", i)
+	}
+	removed := c.Channels[i]
+	a.cfg.Update(func(c *config.Config) {
+		chs := append(append([]config.Channel{}, c.Channels[:i]...), c.Channels[i+1:]...)
+		c.Channels = append(chs, config.DefaultChannel(config.MaxChannels-1))
+		c.ChannelCount--
+	})
+	a.log.Log(logx.Info, "app", "removed channel: Slice %s, port %d", removed.Slice, removed.Port)
+	a.bridge.ApplyChannels()
+	return nil
+}
+
+// SetTXGain changes the TX audio trim live.
+func (a *App) SetTXGain(db int) error {
+	if db < -40 || db > 20 {
+		return fmt.Errorf("TX gain must be -40 to +20 dB")
+	}
+	a.cfg.Update(func(c *config.Config) { c.TXGainDB = db })
+	a.log.Log(logx.Info, "app", "TX gain %d dB", db)
+	return nil
+}
+
 func validate(c config.Config) error {
 	ports := map[int]int{}
 	slices := map[string]int{}
@@ -223,6 +292,8 @@ func (a *App) SetOptions(o Options) error {
 	a.pushStatus()
 	return nil
 }
+
+func (a *App) ConfigDir() string { return config.Dir() }
 
 func (a *App) OpenLogFolder() {
 	exec.Command("explorer", a.log.Dir()).Start()

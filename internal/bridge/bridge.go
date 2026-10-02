@@ -5,6 +5,7 @@ package bridge
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -56,6 +57,7 @@ type Bridge struct {
 	// newRender opens the DAX TX device; replaced in tests.
 	newRender func(device string, pull func([]float32)) stopper
 	dtx       *directTX
+	txPeak    atomic.Uint32 // float32 bits, TX audio peak since last status
 	dtxEpoch  atomic.Uint64 // radio session the dax_tx stream was prepared for
 
 	uiDirty atomic.Bool
@@ -66,7 +68,7 @@ func New(l *logx.Logger, cfg *config.Store, onUI func()) *Bridge {
 	b := &Bridge{log: l, lg: l.Src("bridge"), cfg: cfg, onUI: onUI, quit: make(chan struct{})}
 	b.fifo = audio.NewFifo(audio.Rate) // up to 1 s of TX audio
 	b.radio = flex.NewRadio(l, b.onRadioUpdate)
-	b.dtx = newDirectTX(b.radio, l.Src("dax-tx"), func() float32 { return dbToGain(float64(cfg.Get().TXGainDB)) })
+	b.dtx = newDirectTX(b.radio, l.Src("dax-tx"))
 	b.newRender = func(device string, pull func([]float32)) stopper {
 		if cfg.Get().AudioPath == config.PathWindows {
 			return audio.StartRender(l.Src("dax-tx"), device, audio.AutoTX, pull)
@@ -293,7 +295,7 @@ func (b *Bridge) requestTX(c *client, tciAudio, tune bool) error {
 	// Open the TX audio sink outside the lock: it may talk to the radio or
 	// a sound device, and nothing else may wait on b.mu meanwhile.
 	if openRender {
-		r := b.newRender(b.cfg.Get().TXDevice, func(out []float32) { b.fifo.Read(out) })
+		r := b.newRender(b.cfg.Get().TXDevice, b.pullTX)
 		b.mu.Lock()
 		if b.tx == o && b.render == nil {
 			b.render, r = r, nil
@@ -325,6 +327,30 @@ func (b *Bridge) requestTX(c *client, tciAudio, tune bool) error {
 	}
 	b.notifyUI()
 	return nil
+}
+
+// pullTX feeds the TX audio sink: FIFO audio with the TX gain applied, and
+// the peak recorded for the TX meter.
+func (b *Bridge) pullTX(out []float32) {
+	b.fifo.Read(out)
+	g := dbToGain(float64(b.cfg.Get().TXGainDB))
+	var peak float32
+	for i, v := range out {
+		v *= g
+		out[i] = v
+		if v < 0 {
+			v = -v
+		}
+		if v > peak {
+			peak = v
+		}
+	}
+	for {
+		old := b.txPeak.Load()
+		if peak <= math.Float32frombits(old) || b.txPeak.CompareAndSwap(old, math.Float32bits(peak)) {
+			return
+		}
+	}
 }
 
 // releaseTX unkeys if c is the current owner.
@@ -494,11 +520,13 @@ type Status struct {
 	Radios   []flex.RadioInfo `json:"radios"`
 	Channels []ChannelStatus  `json:"channels"`
 	TXOwner  string           `json:"tx_owner"`
+	TXLevel  float32          `json:"tx_level"` // peak TX audio since the last status
 	Config   config.Config    `json:"config"`
 }
 
 func (b *Bridge) Status() Status {
 	st := Status{Radio: b.radio.Snapshot(), Radios: b.disc.List(), Config: b.cfg.Get()}
+	st.TXLevel = math.Float32frombits(b.txPeak.Swap(0))
 	for _, ch := range b.channelList() {
 		st.Channels = append(st.Channels, ch.status())
 	}

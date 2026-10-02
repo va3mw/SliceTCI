@@ -108,17 +108,16 @@ func (d *directRX) Stop() {
 // directTX owns one dax_tx stream per radio session and paces TX audio to
 // the radio in 128-frame VITA-49 packets at the TX slice's sample rate.
 type directTX struct {
-	r    *flex.Radio
-	lg   *logx.Source
-	gain func() float32 // linear TX gain, read at each key
+	r  *flex.Radio
+	lg *logx.Source
 
 	mu    sync.Mutex
 	id    uint32
 	epoch uint64
 }
 
-func newDirectTX(r *flex.Radio, lg *logx.Source, gain func() float32) *directTX {
-	return &directTX{r: r, lg: lg, gain: gain}
+func newDirectTX(r *flex.Radio, lg *logx.Source) *directTX {
+	return &directTX{r: r, lg: lg}
 }
 
 // dbToGain converts decibels to a linear amplitude factor.
@@ -194,7 +193,6 @@ func (d *directTX) start(pull func([]float32)) stopper {
 			warned  bool
 		)
 		began := time.Now()
-		gain := d.gain()
 		for {
 			select {
 			case <-s.stop:
@@ -228,11 +226,6 @@ func (d *directTX) start(pull func([]float32)) stopper {
 				}
 				pkt := pending[:vita.TXFrames*2]
 				pending = append([]float32(nil), pending[vita.TXFrames*2:]...)
-				if gain != 1 {
-					for i := range pkt {
-						pkt[i] *= gain
-					}
-				}
 				sent += vita.TXFrames
 				due -= vita.TXFrames
 				if !d.r.StreamOwnsTX(id) {

@@ -67,6 +67,8 @@ type Snapshot struct {
 	Connected    bool      `json:"connected"`
 	IP           string    `json:"ip"`
 	Model        string    `json:"model"`
+	Nickname     string    `json:"nickname"`
+	Callsign     string    `json:"callsign"`
 	Stations     []Station `json:"stations"`
 	BoundStation string    `json:"bound_station"`
 	BoundHandle  uint32    `json:"bound_handle"`
@@ -120,6 +122,8 @@ type Radio struct {
 	conn        net.Conn
 	connected   bool
 	ip, model   string
+	nickname    string
+	callsign    string
 	seq         uint32
 	pending     map[uint32]replyFn
 	myHandle    uint32
@@ -452,6 +456,20 @@ func (r *Radio) handleStatus(body string) bool {
 	case "stream":
 		r.applyStream(fields)
 		return true
+	case "radio":
+		if len(fields) < 2 || !strings.Contains(fields[1], "=") {
+			return false // radio filter_sharpness ... etc.
+		}
+		kv := ParseKV(strings.Join(fields[1:], " "))
+		r.mu.Lock()
+		if v, ok := kv["nickname"]; ok {
+			r.nickname = unescape(v)
+		}
+		if v, ok := kv["callsign"]; ok {
+			r.callsign = v
+		}
+		r.mu.Unlock()
+		return true
 	case "transmit":
 		if len(fields) < 2 || !strings.Contains(fields[1], "=") {
 			return false // transmit band ... sub-objects
@@ -648,6 +666,8 @@ func (r *Radio) Snapshot() Snapshot {
 		Connected:    r.connected,
 		IP:           r.ip,
 		Model:        r.model,
+		Nickname:     r.nickname,
+		Callsign:     r.callsign,
 		BoundStation: r.boundName,
 		BoundHandle:  r.boundHandle,
 		MyHandle:     r.myHandle,

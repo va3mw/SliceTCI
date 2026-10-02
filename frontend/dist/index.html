@@ -5,162 +5,199 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FlexTCI</title>
 <style>
+/* Styled after SmartSDR CAT / DAX: light Windows panel, list of port tiles. */
 :root {
-  --bg: #181a1f; --panel: #20232a; --panel2: #262a33; --line: #343945;
-  --text: #e3e6ec; --dim: #8b93a3; --accent: #4ea1ff; --ok: #3ecf8e;
-  --warn: #f0b429; --err: #ff5c5c; --tx: #ff3b3b;
+  --win: #ececec; --panel: #ffffff; --line: #c9c9c9; --line2: #e2e2e2;
+  --text: #1e1e1e; --dim: #6b6b6b; --sel: #dcebfb;
+  --blue: #1565d8; --red: #e0211b; --green: #3e8e3e; --grey: #8a8a8a;
+  --btn: #3a3a3a; --btn-h: #555;
   --mono: "Cascadia Mono", Consolas, monospace;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-  font: 13px "Segoe UI", system-ui, sans-serif; }
-body { display: flex; flex-direction: column; user-select: none; }
+html, body { margin: 0; height: 100%; background: var(--win); color: var(--text);
+  font: 12px "Segoe UI", system-ui, sans-serif; }
+body { display: flex; flex-direction: column; padding: 6px 8px 8px; gap: 6px; user-select: none; }
 input, #log { user-select: text; }
-header { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
-  background: var(--panel); border-bottom: 1px solid var(--line); }
-header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .3px; }
-.pill { padding: 3px 10px; border-radius: 999px; font-size: 12px; background: var(--panel2);
-  border: 1px solid var(--line); color: var(--dim); white-space: nowrap; }
-.pill.ok { color: var(--ok); border-color: #2a6b52; }
-.pill.warn { color: var(--warn); border-color: #6b5520; }
-.pill.err { color: var(--err); border-color: #6b2a2a; }
-.pill.tx { background: var(--tx); color: #fff; border-color: var(--tx); font-weight: 600; }
-.spacer { flex: 1; }
-main { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; overflow: auto; flex: 0 0 auto; }
-section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
-section h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); font-weight: 600; }
-.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-label { color: var(--dim); }
-select, input { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
-  border-radius: 5px; padding: 5px 7px; font: inherit; }
-input[type=number] { width: 80px; }
-input[type=checkbox] { width: auto; }
-select:focus, input:focus { outline: 1px solid var(--accent); }
-button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 5px;
-  padding: 5px 12px; font: inherit; cursor: pointer; }
-button:hover { border-color: var(--accent); }
-button.primary { background: var(--accent); border-color: var(--accent); color: #0b1220; font-weight: 600; }
-button:disabled { opacity: .45; cursor: default; }
-table { width: 100%; border-collapse: collapse; }
-th { text-align: left; color: var(--dim); font-weight: 500; font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--line); }
-td { padding: 5px 6px; border-bottom: 1px solid #2b2f38; vertical-align: middle; }
-tr:last-child td { border-bottom: none; }
-.mono { font-family: var(--mono); }
-.dim { color: var(--dim); }
-.freq { font-family: var(--mono); font-size: 14px; }
-.meter { width: 70px; height: 8px; background: #11141a; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
-.meter > div { height: 100%; width: 0; background: var(--ok); transition: width .2s; }
-.err-text { color: var(--err); font-size: 12px; }
-.clients { font-size: 12px; color: var(--dim); }
-.clients .tx { color: var(--tx); font-weight: 600; }
-#logwrap { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 180px; margin: 0 16px 12px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
-#logbar { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-#logbar h2 { margin: 0 8px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); }
-#log { flex: 1; overflow: auto; outline: none; font-family: var(--mono); font-size: 12px; padding: 6px 10px; white-space: pre-wrap; word-break: break-all; }
-.l { line-height: 1.45; }
-.l .t { color: #6c7486; } .l .s { color: #7aa7d9; }
-.l.TRAFFIC { color: #8b93a3; } .l.DEBUG { color: #b2b8c4; }
-.l.WARN { color: var(--warn); } .l.ERROR { color: var(--err); }
-#toast { position: fixed; right: 16px; bottom: 16px; background: #3a1f1f; border: 1px solid var(--err); color: #ffd2d2;
-  padding: 10px 14px; border-radius: 6px; display: none; max-width: 480px; }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (max-width: 1000px) { .grid2 { grid-template-columns: 1fr; } }
+button { font: inherit; cursor: pointer; }
+select, input[type=text], input[type=number] { font: inherit; border: 1px solid #a9a9a9; border-radius: 2px;
+  background: #fff; color: var(--text); padding: 2px 4px; }
+input[type=number] { width: 72px; }
+.top { display: flex; justify-content: flex-end; }
+.link { background: none; border: none; color: var(--text); display: flex; align-items: center; gap: 4px; padding: 0; }
+.link:hover { color: var(--blue); }
+.radio { display: flex; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--line);
+  padding: 8px 10px; min-height: 64px; }
+.radio .txt { line-height: 1.35; font-size: 12.5px; }
+.radio .txt .dim { color: var(--dim); }
+.station { display: flex; align-items: center; gap: 6px; padding: 2px 2px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.station select { flex: 1; min-width: 0; }
+.dot { width: 13px; height: 13px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #9a9a9a, #555); flex: none; }
+.dot.on { background: radial-gradient(circle at 35% 35%, #7fb2ff, #1d4fbf); }
+.dot.busy { background: radial-gradient(circle at 35% 35%, #ffd27a, #c88700); }
+.list { flex: 1; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); min-height: 120px; }
+.item { display: flex; gap: 10px; padding: 8px 8px; border-bottom: 1px solid var(--line2); position: relative; }
+.item.sel { background: var(--sel); }
+.tile { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 26px; font-weight: 400; background: var(--blue); }
+.tile.err { background: var(--grey); }
+.tile.tx { background: var(--red); }
+.item .body { flex: 1; min-width: 0; line-height: 1.4; }
+.item .name { font-size: 12.5px; }
+.item .meter { height: 4px; background: #e6e6e6; margin-top: 4px; width: 100%; }
+.item .meter > div { height: 100%; width: 0; background: #2fa84f; transition: width .2s; }
+.pills { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 4px; }
+.pill { color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 3px; background: var(--red); white-space: nowrap; }
+.pill.blue { background: var(--blue); } .pill.green { background: var(--green); }
+.buttons { display: flex; justify-content: space-between; gap: 6px; }
+.btn { background: var(--btn); color: #fff; border: none; border-radius: 4px; padding: 5px 0; flex: 1; }
+.btn:hover:not(:disabled) { background: var(--btn-h); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.light { background: #fff; color: var(--text); border: 1px solid #a9a9a9; }
+/* dialogs */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.25); display: none; z-index: 10; }
+.modal.open { display: flex; }
+.dlg { background: var(--win); border: 1px solid #888; margin: auto; width: calc(100% - 20px); max-height: calc(100% - 20px);
+  display: flex; flex-direction: column; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+.dlg h3 { margin: 0; padding: 8px 10px; font-size: 13px; font-weight: 600; background: #fff; border-bottom: 1px solid var(--line); }
+.dlg .content { padding: 10px; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.dlg .foot { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); }
+.field { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 6px; }
+.field label { color: var(--dim); }
+.group { border: 1px solid var(--line); background: #fff; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.group > b { font-weight: 600; }
+.slider { display: flex; align-items: center; gap: 6px; }
+.slider input { flex: 1; }
+.lvl { height: 8px; background: #20262e; position: relative; }
+.lvl > div { height: 100%; width: 0; background: linear-gradient(90deg, #2fa84f 70%, #e8c21b 85%, #e0211b); transition: width .2s; }
+.hint { color: var(--dim); font-size: 11px; }
+.err-text { color: var(--red); }
+/* log view */
+#logDlg .dlg { width: calc(100% - 12px); height: calc(100% - 12px); max-height: none; }
+#logbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+#log { flex: 1; overflow: auto; background: #fff; font: 11.5px var(--mono); padding: 4px 8px; white-space: pre-wrap;
+  word-break: break-word; outline: none; border-top: none; }
+.l .t { color: #888; } .l .s { color: #1f5fa8; }
+.l.TRAFFIC { color: #7a7a7a; } .l.DEBUG { color: #555; }
+.l.WARN { color: #a86b00; } .l.ERROR { color: var(--red); }
+#toast { position: fixed; left: 8px; right: 8px; bottom: 44px; background: #fff3f2; border: 1px solid var(--red); color: #7a0d09;
+  padding: 8px 10px; display: none; z-index: 20; }
 </style>
 </head>
 <body>
-<header>
-  <h1>FlexTCI</h1>
-  <span id="radioPill" class="pill">Radio: not connected</span>
-  <span id="stationPill" class="pill">Station: —</span>
-  <span id="txPill" class="pill">TX enabled: —</span>
-  <span class="spacer"></span>
-  <span id="ownerPill" class="pill" style="display:none"></span>
-</header>
-
-<main>
-  <div class="grid2">
-    <section>
-      <h2>Radio</h2>
-      <div class="row">
-        <label for="radioSel">Radio</label>
-        <select id="radioSel" style="min-width:260px"></select>
-        <label for="manualIp">or IP</label>
-        <input id="manualIp" placeholder="192.168.1.50" style="width:130px">
-        <button id="btnConnect" class="primary">Connect</button>
-        <button id="btnDisconnect">Disconnect</button>
-      </div>
-      <div class="row" style="margin-top:10px">
-        <label for="stationSel">Station</label>
-        <select id="stationSel" style="min-width:260px"></select>
-        <span class="dim" id="stationHint"></span>
-      </div>
-    </section>
-    <section>
-      <h2>Audio, transmit &amp; options</h2>
-      <div class="row">
-        <label for="audioPath">Audio path</label>
-        <select id="audioPath">
-          <option value="radio">Direct from radio (no DAX needed)</option>
-          <option value="windows">Windows DAX devices (SmartSDR DAX)</option>
-        </select>
-      </div>
-      <div class="row" style="margin-top:10px">
-        <label for="txDev">DAX TX device</label>
-        <select id="txDev" style="min-width:260px"></select>
-      </div>
-      <div class="row" style="margin-top:10px">
-        <label for="unkeyMs" title="Unkey if the transmitting client sends no TX audio for this long">Safety unkey (ms)</label>
-        <input id="unkeyMs" type="number" min="500" max="10000" step="100">
-        <label for="protoName" title="First argument of PROTOCOL: in the init burst">Protocol name</label>
-        <input id="protoName" style="width:110px">
-        <label><input id="autoDax" type="checkbox"> Set slice DAX channel</label>
-        <label for="txGain" title="Trim applied to TCI TX audio sent to the radio (direct path)">TX gain (dB)</label>
-        <input id="txGain" type="number" min="-40" max="20" step="1" style="width:60px">
-        <button id="btnOptions">Save</button>
-      </div>
-    </section>
-  </div>
-
-  <section>
-    <div class="row" style="margin-bottom:8px">
-      <h2 style="margin:0">TCI channels</h2>
-      <span class="spacer"></span>
-      <label for="chanCount">Channels</label>
-      <select id="chanCount"></select>
-      <button id="btnRefreshDev" title="Re-scan Windows audio devices">Refresh devices</button>
-    </div>
-    <table>
-      <thead><tr>
-        <th>#</th><th>Slice</th><th>TCI port</th><th>DAX ch</th><th>RX audio source</th><th title="RX level trim for the direct path; aim for about 30 dB on the WSJT-X meter">RX dB</th><th></th>
-        <th>Status</th><th>Frequency</th><th>Mode</th><th>RX</th><th>Clients</th>
-      </tr></thead>
-      <tbody id="chanBody"></tbody>
-    </table>
-  </section>
-</main>
-
-<div id="logwrap">
-  <div id="logbar">
-    <h2>Log</h2>
-    <label for="logLevel">Show</label>
-    <select id="logLevel">
-      <option value="0">Traffic +</option>
-      <option value="1">Debug +</option>
-      <option value="2" selected>Info +</option>
-      <option value="3">Warnings +</option>
-      <option value="4">Errors</option>
-    </select>
-    <label><input id="logTraffic" type="checkbox"> Capture TCI/API traffic</label>
-    <input id="logFilter" placeholder="filter text" style="width:180px">
-    <label><input id="logFollow" type="checkbox" checked> Follow</label>
-    <span class="spacer"></span>
-    <button id="btnCopyLog">Copy</button>
-    <button id="btnClearLog">Clear</button>
-    <button id="btnLogFolder">Open log folder</button>
-  </div>
-  <div id="log"></div>
+<div class="top">
+  <button class="link" id="btnSettings" title="Settings">Settings
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.9a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1L11 21h4l.4-2.9a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5L19.4 13zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>
+  </button>
 </div>
+
+<div class="radio">
+  <svg width="86" height="44" viewBox="0 0 86 44" aria-hidden="true">
+    <rect x="2" y="6" width="82" height="34" rx="3" fill="#2b2d31"/>
+    <rect x="2" y="6" width="82" height="5" rx="2" fill="#3b3e44"/>
+    <rect x="8" y="16" width="34" height="14" rx="1" fill="#11161c"/>
+    <rect x="10" y="18" width="30" height="2" fill="#2e6fd1" opacity=".7"/>
+    <circle cx="62" cy="24" r="8" fill="#17191c" stroke="#4a4d53"/>
+    <circle cx="76" cy="20" r="2" fill="#4a4d53"/><circle cx="76" cy="28" r="2" fill="#4a4d53"/>
+    <rect x="6" y="40" width="8" height="3" fill="#1b1c1f"/><rect x="72" y="40" width="8" height="3" fill="#1b1c1f"/>
+  </svg>
+  <div class="txt" id="radioTxt"><span class="dim">Not connected</span></div>
+</div>
+
+<div class="station">
+  <label for="stationSel">Station:</label>
+  <select id="stationSel"></select>
+  <span class="dot" id="dot" title="Radio connection"></span>
+</div>
+
+<div class="list" id="list"></div>
+
+<div class="buttons">
+  <button class="btn" id="btnAdd">Add...</button>
+  <button class="btn" id="btnEdit">Edit...</button>
+  <button class="btn" id="btnLog">Log...</button>
+  <button class="btn" id="btnRemove">Remove</button>
+</div>
+
+<!-- Edit channel -->
+<div class="modal" id="editDlg"><div class="dlg">
+  <h3 id="editTitle">Edit TCI channel</h3>
+  <div class="content">
+    <div class="field"><label for="eSlice">Slice</label>
+      <select id="eSlice"><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>F</option><option>G</option><option>H</option></select></div>
+    <div class="field"><label for="ePort">TCP port</label><input id="ePort" type="number" min="1024" max="65535"></div>
+    <div class="field"><label for="eDax">DAX channel</label>
+      <select id="eDax"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></div>
+    <div class="field"><label for="eRx">RX audio</label><select id="eRx"></select></div>
+    <div class="group">
+      <b>RX gain</b>
+      <div class="slider"><input id="eGain" type="range" min="-80" max="20" step="1"><span id="eGainVal" style="width:44px;text-align:right"></span></div>
+      <div class="lvl"><div id="eLvl"></div></div>
+      <div class="hint">Direct path only. Aim for about 30 dB on the WSJT-X meter.</div>
+    </div>
+    <div class="hint">Clients connect to <span class="mono">127.0.0.1:<span id="ePortHint"></span></span> as TCI receiver 1.</div>
+  </div>
+  <div class="foot">
+    <button class="btn light" id="eReset" title="Back to defaults for this position">Defaults</button>
+    <span style="flex:1"></span>
+    <button class="btn" id="eOk" style="flex:0 0 72px">OK</button>
+    <button class="btn light" id="eCancel" style="flex:0 0 72px">Cancel</button>
+  </div>
+</div></div>
+
+<!-- Settings -->
+<div class="modal" id="setDlg"><div class="dlg">
+  <h3>Settings</h3>
+  <div class="content">
+    <div class="group">
+      <b>Radio</b>
+      <select id="radioSel"></select>
+      <div class="slider"><input id="manualIp" type="text" placeholder="or IP address" style="flex:1">
+        <button class="btn" id="btnConnect" style="flex:0 0 70px">Connect</button></div>
+      <button class="btn light" id="btnDisconnect">Disconnect</button>
+    </div>
+    <div class="group">
+      <b>Audio</b>
+      <div class="field"><label for="audioPath">Audio path</label>
+        <select id="audioPath"><option value="radio">Direct from radio</option><option value="windows">Windows DAX devices</option></select></div>
+      <div class="field"><label for="txDev">DAX TX device</label><select id="txDev"></select></div>
+      <div>TX gain</div>
+      <div class="slider"><input id="txGain" type="range" min="-40" max="20" step="1"><span id="txGainVal" style="width:44px;text-align:right"></span></div>
+      <div class="lvl"><div id="txLvl"></div></div>
+    </div>
+    <div class="group">
+      <b>Behaviour</b>
+      <div class="field"><label for="unkeyMs">Safety unkey (ms)</label><input id="unkeyMs" type="number" min="500" max="10000" step="100"></div>
+      <div class="field"><label for="protoName">Protocol name</label><input id="protoName" type="text"></div>
+      <label><input id="autoDax" type="checkbox"> Set the slice's DAX channel when a client connects</label>
+      <label><input id="logTraffic" type="checkbox"> Capture TCI/API traffic in the log</label>
+    </div>
+    <div class="hint" id="aboutLine"></div>
+  </div>
+  <div class="foot"><span style="flex:1"></span>
+    <button class="btn" id="setSave" style="flex:0 0 72px">Save</button>
+    <button class="btn light" id="setClose" style="flex:0 0 72px">Close</button>
+  </div>
+</div></div>
+
+<!-- Log -->
+<div class="modal" id="logDlg"><div class="dlg">
+  <h3>Log</h3>
+  <div id="logbar">
+    <select id="logLevel">
+      <option value="0">Traffic +</option><option value="1">Debug +</option>
+      <option value="2" selected>Info +</option><option value="3">Warnings +</option><option value="4">Errors</option>
+    </select>
+    <input id="logFilter" type="text" placeholder="filter" style="width:120px">
+    <label><input id="logFollow" type="checkbox" checked> Follow</label>
+    <span style="flex:1"></span>
+    <button class="btn light" id="btnCopyLog" style="flex:0 0 auto;padding:4px 10px">Copy</button>
+    <button class="btn light" id="btnClearLog" style="flex:0 0 auto;padding:4px 10px">Clear</button>
+    <button class="btn light" id="btnLogFolder" style="flex:0 0 auto;padding:4px 10px">Folder</button>
+    <button class="btn" id="btnLogClose" style="flex:0 0 auto;padding:4px 12px">Close</button>
+  </div>
+  <div id="log" tabindex="0"></div>
+</div></div>
+
 <div id="toast"></div>
 
 <script>
@@ -170,7 +207,7 @@ const LEVELS = { TRAFFIC: 0, DEBUG: 1, INFO: 2, WARN: 3, ERROR: 4 };
 const MAXLOG = 4000;
 let status = null, devices = { capture: [], render: [] };
 let logEntries = [], lastLogId = 0;
-let renderedCount = -1;
+let selected = 0, editing = -1;
 
 function toast(msg) {
   const t = $("toast"); t.textContent = msg; t.style.display = "block";
@@ -179,170 +216,189 @@ function toast(msg) {
 async function call(fn, ...args) {
   try { return await api()[fn](...args); } catch (e) { toast(String(e)); throw e; }
 }
-function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
-function fmtFreq(hz) {
-  if (!hz) return "—";
-  const s = String(hz).padStart(7, "0");
-  return (s.slice(0, -6) + "." + s.slice(-6, -3) + "." + s.slice(-3));
-}
-function setOptions(sel, items, value) {
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const setOptions = (sel, items, value) => {
   sel.innerHTML = items.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("");
   sel.value = value;
-}
+};
+const fmtFreq = hz => { const s = String(hz).padStart(7, "0"); return s.slice(0, -6) + "." + s.slice(-6, -3) + "." + s.slice(-3); };
+// Peak (0..1) to a 0..100% bar on a -60..0 dBFS scale, like DAX.
+const pct = peak => peak <= 0 ? 0 : Math.max(0, Math.min(100, (20 * Math.log10(peak) + 60) / 60 * 100));
+const gainOf = c => (c.rx_gain_db === null || c.rx_gain_db === undefined) ? -40 : c.rx_gain_db;
+const isWindows = () => status && status.config.audio_path === "windows";
+const open = id => $(id).classList.add("open");
+const close = id => $(id).classList.remove("open");
+const isOpen = id => $(id).classList.contains("open");
 
-// ---------- header + radio ----------
+// ---------- main view ----------
 function renderHeader(s) {
-  const r = s.radio;
-  const rp = $("radioPill");
-  if (r.connected) { rp.className = "pill ok"; rp.textContent = `Radio: ${r.model || "FlexRadio"} ${r.ip}`; }
-  else if (s.config.auto_connect && (s.config.radio_ip || s.config.radio_serial)) { rp.className = "pill warn"; rp.textContent = "Radio: connecting…"; }
-  else { rp.className = "pill"; rp.textContent = "Radio: not connected"; }
-  const sp = $("stationPill");
-  if (r.bound_station) { sp.className = "pill ok"; sp.textContent = `Station: ${r.bound_station}`; }
-  else { sp.className = r.connected ? "pill warn" : "pill"; sp.textContent = r.connected ? "Station: not bound" : "Station: —"; }
-  const tp = $("txPill");
-  if (!r.connected) { tp.className = "pill"; tp.textContent = "TX enabled: —"; }
-  else if (r.interlock.tx_allowed) { tp.className = "pill ok"; tp.textContent = "TX enabled"; }
-  else { tp.className = "pill err"; tp.textContent = "TX inhibited " + (r.interlock.reason || ""); }
-  const op = $("ownerPill");
-  if (s.tx_owner) { op.style.display = ""; op.className = "pill tx"; op.textContent = s.tx_owner; }
-  else op.style.display = "none";
-}
+  const r = s.radio, c = s.config;
+  const connecting = !r.connected && c.auto_connect && (c.radio_ip || c.radio_serial);
+  $("radioTxt").innerHTML = r.connected
+    ? `${esc(r.model || "FlexRadio")}<br>${esc(r.nickname || r.ip)}<br>${esc(r.callsign || "")}`
+    : `<span class="dim">${connecting ? "Connecting…" : "Not connected"}</span><br><span class="dim">${esc(c.radio_ip || "")}</span>`;
+  const dot = $("dot");
+  dot.className = "dot" + (r.connected && r.bound_station ? " on" : (r.connected || connecting ? " busy" : ""));
+  dot.title = r.connected ? (r.bound_station ? `Bound to ${r.bound_station}` : "Connected, no station bound") : "Not connected";
 
-function renderRadioPickers(s) {
-  const sel = $("radioSel");
-  if (document.activeElement !== sel) {
-    const items = [["", s.radios.length ? "— select radio —" : "— no radios found —"]]
-      .concat(s.radios.map(r => [r.serial, `${r.model} "${r.nickname}" ${r.ip} (${r.status})`]));
-    const want = sel.value || s.config.radio_serial;
-    setOptions(sel, items, s.radios.some(r => r.serial === want) ? want : "");
-  }
   const st = $("stationSel");
   if (document.activeElement !== st) {
-    const names = (s.radio.stations || []).map(x => x.name);
-    const cur = s.config.station;
-    const items = [["", "Auto (only station)"]].concat(names.map(n => [n, n]));
-    if (cur && !names.includes(cur)) items.push([cur, cur + " (not connected)"]);
-    setOptions(st, items, cur);
-  }
-  $("stationHint").textContent = s.radio.connected && !(s.radio.stations || []).length
-    ? "Start SmartSDR (or Maestro) so there is a station to bind to." : "";
-}
-
-// ---------- channels ----------
-const isWindowsPath = () => status && status.config.audio_path === "windows";
-function deviceOptions(selected, dax) {
-  if (!isWindowsPath()) return [[selected, `Radio stream (DAX ch ${dax})`]];
-  const items = [["", `Auto (DAX Audio RX ${dax})`]].concat(devices.capture.map(d => [d.name, d.name]));
-  if (selected && !devices.capture.some(d => d.name === selected)) items.push([selected, selected + " (missing)"]);
-  return items;
-}
-
-function buildChannelRows() {
-  const cfg = status.config;
-  const n = cfg.channel_count;
-  const body = $("chanBody");
-  body.innerHTML = "";
-  for (let i = 0; i < n; i++) {
-    const c = cfg.channels[i];
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="dim">${i + 1}</td>
-      <td><select data-f="slice">${"ABCDEFGH".split("").map(l => `<option>${l}</option>`).join("")}</select></td>
-      <td><input data-f="port" type="number" min="1024" max="65535"></td>
-      <td><select data-f="dax">${[1,2,3,4,5,6,7,8].map(d => `<option>${d}</option>`).join("")}</select></td>
-      <td><select data-f="rx" style="max-width:260px"></select></td>
-      <td><input data-f="gain" type="number" min="-80" max="20" step="1" style="width:60px"></td>
-      <td><button data-a="apply" disabled>Apply</button> <button data-a="reset" title="Back to defaults">↺</button></td>
-      <td data-s="status"></td>
-      <td data-s="freq" class="freq"></td>
-      <td data-s="mode" class="mono"></td>
-      <td><div class="meter"><div data-s="meter"></div></div></td>
-      <td data-s="clients" class="clients"></td>`;
-    const q = f => tr.querySelector(`[data-f=${f}]`);
-    q("slice").value = c.slice; q("port").value = c.port; q("dax").value = c.dax;
-    setOptions(q("rx"), deviceOptions(c.rx_device, c.dax), c.rx_device);
-    q("rx").disabled = !isWindowsPath();
-    const apply = tr.querySelector("[data-a=apply]");
-    const gainOf = o => (o.rx_gain_db === null || o.rx_gain_db === undefined) ? -40 : o.rx_gain_db;
-    q("gain").value = gainOf(c);
-    const read = () => ({ slice: q("slice").value, port: +q("port").value, dax: +q("dax").value, rx_device: q("rx").value, rx_gain_db: +q("gain").value });
-    const dirty = () => {
-      const v = read(), o = status.config.channels[i];
-      apply.disabled = v.slice === o.slice && v.port === o.port && v.dax === o.dax && v.rx_device === o.rx_device && v.rx_gain_db === gainOf(o);
-    };
-    tr.querySelectorAll("[data-f]").forEach(el => el.addEventListener("input", dirty));
-    q("dax").addEventListener("change", () => {
-      const cur = q("rx").value; setOptions(q("rx"), deviceOptions(cur, q("dax").value), cur);
-    });
-    apply.onclick = async () => {
-      await call("UpdateChannel", i, read());
-      status = await call("GetStatus"); buildChannelRows(); updateChannelStatus();
-    };
-    tr.querySelector("[data-a=reset]").onclick = async () => {
-      await call("ResetChannel", i);
-      status = await call("GetStatus"); buildChannelRows(); updateChannelStatus();
-    };
-    body.appendChild(tr);
-  }
-  renderedCount = n;
-}
-
-function updateChannelStatus() {
-  const rows = $("chanBody").children;
-  for (let i = 0; i < rows.length; i++) {
-    const tr = rows[i];
-    const cs = (status.channels || []).find(c => c.index === i);
-    const s = f => tr.querySelector(`[data-s=${f}]`);
-    if (!cs) { s("status").innerHTML = '<span class="dim">stopped</span>'; continue; }
-    let st;
-    if (cs.error) st = `<span class="err-text" title="${esc(cs.error)}">port error</span>`;
-    else if (!status.radio.connected) st = '<span class="dim">listening, no radio</span>';
-    else if (!cs.present) st = `<span style="color:var(--warn)">Slice ${cs.slice} not open</span>`;
-    else if (cs.trx) st = '<span style="color:var(--tx);font-weight:600">TRANSMIT</span>';
-    else st = `<span style="color:var(--ok)">ready</span>${cs.tx_enable ? "" : ' <span class="err-text">TX off</span>'}`;
-    s("status").innerHTML = st;
-    s("freq").textContent = cs.present ? fmtFreq(cs.freq_hz) : "—";
-    s("mode").textContent = cs.present ? (cs.mode || "").toUpperCase() : "";
-    s("meter").style.width = Math.min(100, Math.round(Math.sqrt(cs.rx_level) * 100)) + "%";
-    s("clients").innerHTML = (cs.clients || []).length
-      ? cs.clients.map(c => `<div class="${c.tx ? "tx" : ""}">#${c.id} ${esc(c.remote)}${c.audio ? ` · audio ${c.rate / 1000}k ${c.format}/${c.channels}ch` : ""}${c.tx ? " · TX" : ""}</div>`).join("")
-      : "none";
+    const list = r.stations || [];
+    const items = [["", list.length === 1 ? `${list[0].name} (auto)` : "Auto (only station)"]].concat(list.map(x => [x.name, x.name]));
+    if (c.station && !list.some(x => x.name === c.station)) items.push([c.station, c.station + " (not connected)"]);
+    setOptions(st, items, c.station);
+    const b = list.find(x => x.name === r.bound_station);
+    st.title = b ? `${b.program}: ${b.client_id}` : "";
   }
 }
 
-function renderOptions(s, force) {
-  const c = s.config;
-  const ae = document.activeElement;
-  if (force || ![$("unkeyMs"), $("protoName"), $("txGain")].includes(ae)) {
-    $("txGain").value = c.tx_gain_db;
-    $("unkeyMs").value = c.unkey_timeout_ms; $("protoName").value = c.protocol_name;
-    $("autoDax").checked = c.set_slice_dax;
-  }
-  $("logTraffic").checked = c.log_traffic;
-  $("chanCount").value = c.channel_count;
-  if (ae !== $("audioPath")) $("audioPath").value = c.audio_path;
-  if (ae !== $("txDev")) {
-    let items;
-    if (c.audio_path === "windows") {
-      items = [["", "Auto (DAX Audio TX)"]].concat(devices.render.map(d => [d.name, d.name]));
-      if (c.tx_device && !devices.render.some(d => d.name === c.tx_device)) items.push([c.tx_device, c.tx_device + " (missing)"]);
-    } else {
-      items = [[c.tx_device, "Radio stream (dax_tx)"]];
+function renderList(s) {
+  const list = $("list");
+  const n = s.config.channel_count;
+  if (selected >= n) selected = n - 1;
+  if (list.childElementCount !== n) {
+    list.innerHTML = "";
+    for (let i = 0; i < n; i++) {
+      const el = document.createElement("div");
+      el.className = "item";
+      el.innerHTML = `<div class="tile">T</div><div class="body"></div><div class="pills"></div>`;
+      el.onclick = () => { selected = i; renderList(status); };
+      el.ondblclick = () => { selected = i; openEdit(i); };
+      list.appendChild(el);
     }
-    setOptions($("txDev"), items, c.tx_device);
-    $("txDev").disabled = c.audio_path !== "windows";
   }
+  for (let i = 0; i < n; i++) {
+    const el = list.children[i];
+    const cfg = s.config.channels[i];
+    const cs = (s.channels || []).find(c => c.index === i) || {};
+    const clients = cs.clients || [];
+    const tx = cs.trx;
+    el.classList.toggle("sel", i === selected);
+    const tile = el.querySelector(".tile");
+    tile.className = "tile" + (cs.error ? " err" : tx ? " tx" : "");
+    const audio = clients.find(c => c.audio);
+    const slice = s.radio.connected && cs.present
+      ? `Slice: ${cfg.slice} &nbsp;${fmtFreq(cs.freq_hz)} ${esc((cs.mode || "").toUpperCase())}`
+      : `Slice: ${cfg.slice}`;
+    const client = clients.length
+      ? clients.map(c => `${esc(c.remote)}${c.audio ? ` (${c.rate / 1000}k)` : ""}`).join(", ")
+      : "(None)";
+    el.querySelector(".body").innerHTML =
+      `<div class="name">TCI-${cfg.slice}</div>
+       <div>TCP: Port ${cfg.port} &nbsp;DAX: ${cfg.dax}</div>
+       <div>${slice}</div>
+       <div>Client: ${client}</div>
+       ${audio ? `<div class="meter"><div style="width:${pct(cs.rx_level)}%"></div></div>` : ""}`;
+    const pills = [];
+    if (cs.error) pills.push(`<span class="pill" title="${esc(cs.error)}">Port In Use</span>`);
+    else if (s.radio.connected && !cs.present) pills.push(`<span class="pill">Not Present</span>`);
+    if (tx) pills.push(`<span class="pill">TX</span>`);
+    else if (cs.present && !cs.tx_enable && s.radio.connected) pills.push(`<span class="pill">TX Inhibit</span>`);
+    if (audio && !tx) pills.push(`<span class="pill blue">Audio</span>`);
+    el.querySelector(".pills").innerHTML = pills.join("");
+  }
+  $("btnRemove").disabled = n <= 1;
+  $("btnAdd").disabled = n >= 8;
 }
 
 function onStatus(s) {
   status = s;
   renderHeader(s);
-  renderRadioPickers(s);
-  renderOptions(s, false);
-  if (renderedCount !== s.config.channel_count) buildChannelRows();
-  updateChannelStatus();
+  renderList(s);
+  if (isOpen("editDlg")) {
+    const cs = (s.channels || []).find(c => c.index === editing);
+    $("eLvl").style.width = (cs ? pct(cs.rx_level) : 0) + "%";
+  }
+  if (isOpen("setDlg")) { renderSettings(s, false); $("txLvl").style.width = pct(s.tx_level) + "%"; }
 }
+
+// ---------- edit dialog ----------
+function rxItems(selectedName, dax) {
+  if (!isWindows()) return [[selectedName, `Radio stream (DAX ${dax})`]];
+  const items = [["", `Auto (DAX Audio RX ${dax})`]].concat(devices.capture.map(d => [d.name, d.name]));
+  if (selectedName && !devices.capture.some(d => d.name === selectedName)) items.push([selectedName, selectedName + " (missing)"]);
+  return items;
+}
+function openEdit(i) {
+  editing = i;
+  const c = status.config.channels[i];
+  $("editTitle").textContent = `Edit TCI-${c.slice}`;
+  $("eSlice").value = c.slice; $("ePort").value = c.port; $("eDax").value = c.dax;
+  setOptions($("eRx"), rxItems(c.rx_device, c.dax), c.rx_device);
+  $("eRx").disabled = !isWindows();
+  $("eGain").value = gainOf(c); $("eGainVal").textContent = gainOf(c) + " dB";
+  $("eGain").disabled = isWindows();
+  $("ePortHint").textContent = c.port;
+  open("editDlg");
+}
+$("eDax").onchange = () => { const cur = $("eRx").value; setOptions($("eRx"), rxItems(cur, $("eDax").value), cur); };
+$("ePort").oninput = () => $("ePortHint").textContent = $("ePort").value;
+$("eGain").oninput = () => $("eGainVal").textContent = $("eGain").value + " dB";
+$("eCancel").onclick = () => close("editDlg");
+$("eReset").onclick = async () => {
+  await call("ResetChannel", editing).catch(() => {});
+  onStatus(await call("GetStatus")); openEdit(editing);
+};
+$("eOk").onclick = async () => {
+  const ch = { slice: $("eSlice").value, port: +$("ePort").value, dax: +$("eDax").value,
+               rx_device: $("eRx").value, rx_gain_db: +$("eGain").value };
+  try { await call("UpdateChannel", editing, ch); } catch { return; }
+  close("editDlg"); onStatus(await call("GetStatus"));
+};
+
+// ---------- settings ----------
+function renderSettings(s, force) {
+  const c = s.config, ae = document.activeElement;
+  if (force || ae !== $("radioSel")) {
+    const items = [["", s.radios.length ? "— select radio —" : "— no radios found —"]]
+      .concat(s.radios.map(r => [r.serial, `${r.model} "${r.nickname}" ${r.ip}`]));
+    const want = (force ? "" : $("radioSel").value) || c.radio_serial;
+    setOptions($("radioSel"), items, s.radios.some(r => r.serial === want) ? want : "");
+  }
+  if (force) {
+    $("audioPath").value = c.audio_path;
+    $("unkeyMs").value = c.unkey_timeout_ms; $("protoName").value = c.protocol_name;
+    $("autoDax").checked = c.set_slice_dax; $("logTraffic").checked = c.log_traffic;
+    $("txGain").value = c.tx_gain_db; $("txGainVal").textContent = c.tx_gain_db + " dB";
+  }
+  if (force || ae !== $("txDev")) {
+    let items;
+    if (c.audio_path === "windows") {
+      items = [["", "Auto (DAX Audio TX)"]].concat(devices.render.map(d => [d.name, d.name]));
+      if (c.tx_device && !devices.render.some(d => d.name === c.tx_device)) items.push([c.tx_device, c.tx_device + " (missing)"]);
+    } else items = [[c.tx_device, "Radio stream (dax_tx)"]];
+    setOptions($("txDev"), items, c.tx_device);
+    $("txDev").disabled = c.audio_path !== "windows";
+  }
+}
+$("btnSettings").onclick = async () => {
+  status = await call("GetStatus");
+  renderSettings(status, true);
+  open("setDlg");
+};
+$("setClose").onclick = () => close("setDlg");
+$("btnConnect").onclick = () => {
+  const serial = $("radioSel").value, ip = $("manualIp").value.trim();
+  if (!serial && !ip) return toast("Pick a radio or enter its IP address.");
+  call("Connect", ip ? "" : serial, ip);
+};
+$("btnDisconnect").onclick = () => call("Disconnect");
+$("audioPath").onchange = async e => {
+  await call("SetAudioPath", e.target.value).catch(() => {});
+  status = await call("GetStatus"); renderSettings(status, false);
+};
+$("txDev").onchange = e => call("SetTXDevice", e.target.value);
+$("txGain").oninput = () => $("txGainVal").textContent = $("txGain").value + " dB";
+$("txGain").onchange = () => call("SetTXGain", +$("txGain").value);
+$("setSave").onclick = async () => {
+  try {
+    await call("SetOptions", {
+      unkey_timeout_ms: +$("unkeyMs").value, protocol_name: $("protoName").value,
+      set_slice_dax: $("autoDax").checked, log_traffic: $("logTraffic").checked, tx_gain_db: +$("txGain").value,
+    });
+  } catch { return; }
+  close("setDlg");
+};
 
 // ---------- log ----------
 function logLine(e) {
@@ -357,77 +413,71 @@ function redrawLog() {
   if ($("logFollow").checked) $("log").scrollTop = $("log").scrollHeight;
 }
 function addLogs(batch) {
-  batch = batch.filter(e => e.id > lastLogId);
+  batch = (batch || []).filter(e => e.id > lastLogId);
   if (!batch.length) return;
   lastLogId = batch[batch.length - 1].id;
   logEntries.push(...batch);
-  if (logEntries.length > MAXLOG) { logEntries = logEntries.slice(-MAXLOG); redrawLog(); return; }
+  if (logEntries.length > MAXLOG) logEntries = logEntries.slice(-MAXLOG);
+  if (!isOpen("logDlg")) return;
   const log = $("log");
   log.insertAdjacentHTML("beforeend", batch.filter(visible).map(logLine).join(""));
   while (log.childElementCount > MAXLOG) log.firstElementChild.remove();
   if ($("logFollow").checked) log.scrollTop = log.scrollHeight;
 }
+let savedSize = null;
+$("btnLog").onclick = async () => {
+  open("logDlg"); redrawLog(); $("log").focus();
+  // Widen the window while the log is open; restore it on close.
+  try {
+    savedSize = await window.runtime.WindowGetSize();
+    if (savedSize.w < 900) window.runtime.WindowSetSize(900, Math.max(savedSize.h, 640));
+  } catch { savedSize = null; }
+};
+$("btnLogClose").onclick = () => {
+  close("logDlg");
+  if (savedSize) window.runtime.WindowSetSize(savedSize.w, savedSize.h);
+};
+$("logLevel").onchange = redrawLog;
+$("logFilter").oninput = redrawLog;
+$("btnClearLog").onclick = () => { logEntries = []; $("log").innerHTML = ""; };
+$("btnCopyLog").onclick = () => {
+  const text = logEntries.filter(visible).map(e => `${e.time} ${e.level} ${e.source} ${e.msg}`).join("\n");
+  navigator.clipboard.writeText(text).then(() => toast("Log copied to clipboard"));
+};
+$("btnLogFolder").onclick = () => call("OpenLogFolder");
+// Ctrl+A selects the log text only.
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" && !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) {
+    e.preventDefault();
+    if (!isOpen("logDlg")) return;
+    const r = document.createRange(); r.selectNodeContents($("log"));
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }
+  if (e.key === "Escape") ["editDlg", "setDlg"].forEach(close);
+});
 
-// ---------- wiring ----------
-async function refreshDevices() {
-  devices = await call("GetDevices");
-  if (devices.error) toast("Audio devices: " + devices.error);
-  devices.capture = devices.capture || []; devices.render = devices.render || [];
-  if (status) { renderOptions(status, false); buildChannelRows(); updateChannelStatus(); }
-}
+// ---------- main buttons ----------
+$("stationSel").onchange = e => call("SelectStation", e.target.value);
+$("btnAdd").onclick = async () => {
+  await call("AddChannel").catch(() => {});
+  onStatus(await call("GetStatus")); selected = status.config.channel_count - 1; renderList(status);
+};
+$("btnEdit").onclick = () => openEdit(selected);
+$("btnRemove").onclick = async () => {
+  const c = status.config.channels[selected];
+  if (!confirm(`Remove TCI-${c.slice} (port ${c.port})? Connected clients will be dropped.`)) return;
+  await call("RemoveChannel", selected).catch(() => {});
+  onStatus(await call("GetStatus"));
+};
 
 async function init() {
-  setOptions($("chanCount"), [1, 2, 3, 4, 5, 6, 7, 8].map(n => [n, n]), 1);
-  $("btnConnect").onclick = () => {
-    const serial = $("radioSel").value, ip = $("manualIp").value.trim();
-    if (!serial && !ip) return toast("Pick a radio or enter its IP address.");
-    call("Connect", ip ? "" : serial, ip);
-  };
-  $("btnDisconnect").onclick = () => call("Disconnect");
-  $("stationSel").onchange = e => call("SelectStation", e.target.value);
-  $("txDev").onchange = e => call("SetTXDevice", e.target.value);
-  $("audioPath").onchange = async e => {
-    await call("SetAudioPath", e.target.value).catch(() => {});
-    status = await call("GetStatus");
-    renderOptions(status, false); buildChannelRows(); updateChannelStatus();
-  };
-  $("chanCount").onchange = async e => {
-    await call("SetChannelCount", +e.target.value).catch(() => {});
-    onStatus(await call("GetStatus"));
-  };
-  $("btnRefreshDev").onclick = refreshDevices;
-  const saveOptions = () => call("SetOptions", {
-    unkey_timeout_ms: +$("unkeyMs").value, protocol_name: $("protoName").value,
-    set_slice_dax: $("autoDax").checked, log_traffic: $("logTraffic").checked, tx_gain_db: +$("txGain").value,
-  });
-  $("btnOptions").onclick = saveOptions;
-  $("logTraffic").onchange = saveOptions;
-  $("logLevel").onchange = redrawLog;
-  $("logFilter").oninput = redrawLog;
-  $("btnClearLog").onclick = () => { logEntries = []; $("log").innerHTML = ""; };
-  $("btnCopyLog").onclick = () => {
-    const text = logEntries.filter(visible).map(e => `${e.time} ${e.level} ${e.source} ${e.msg}`).join("\n");
-    navigator.clipboard.writeText(text).then(() => toast("Log copied to clipboard"));
-  };
-  $("btnLogFolder").onclick = () => call("OpenLogFolder");
-  // Ctrl+A selects the log text only, not the whole window.
-  $("log").tabIndex = 0;
-  document.addEventListener("keydown", e => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" &&
-        !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) {
-      e.preventDefault();
-      const r = document.createRange(); r.selectNodeContents($("log"));
-      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
-    }
-  });
-
   window.runtime.EventsOn("status", onStatus);
   window.runtime.EventsOn("log", addLogs);
   addLogs(await call("GetLogs", 0));
-  await refreshDevices();
-  const s = await call("GetStatus");
-  renderOptions(s, true);
-  onStatus(s);
+  devices = await call("GetDevices");
+  devices.capture = devices.capture || []; devices.render = devices.render || [];
+  onStatus(await call("GetStatus"));
+  try { $("aboutLine").textContent = "Settings: " + (await api().ConfigDir()); } catch {}
 }
 window.addEventListener("load", init);
 </script>

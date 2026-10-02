@@ -16,7 +16,7 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-const version = "0.2.1"
+const version = "0.3.0"
 
 func main() {
 	cfg := config.Load()
@@ -27,14 +27,14 @@ func main() {
 	app := NewApp(l, cfg)
 	err := wails.Run(&options.App{
 		Title:     "FlexTCI " + version,
-		Width:     1180,
+		Width:     330,
 		Height:    820,
-		MinWidth:  900,
-		MinHeight: 600,
+		MinWidth:  300,
+		MinHeight: 520,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 24, G: 26, B: 31, A: 1},
+		BackgroundColour: &options.RGBA{R: 236, G: 236, B: 236, A: 1},
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
 		Bind:             []interface{}{app},
