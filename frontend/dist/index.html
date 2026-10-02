@@ -127,12 +127,11 @@ input[type=number] { width: 72px; }
     <div class="field"><label for="ePort">TCP port</label><input id="ePort" type="number" min="1024" max="65535"></div>
     <div class="field"><label for="eDax">DAX channel</label>
       <select id="eDax"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></div>
-    <div class="field"><label for="eRx">RX audio</label><select id="eRx"></select></div>
     <div class="group">
       <b>RX gain</b>
       <div class="slider"><input id="eGain" type="range" min="-80" max="20" step="1"><span id="eGainVal" style="width:44px;text-align:right"></span></div>
       <div class="lvl"><div id="eLvl"></div></div>
-      <div class="hint">Direct path only. Aim for about 30 dB on the WSJT-X meter.</div>
+      <div class="hint">Aim for about 30 dB on the WSJT-X meter.</div>
     </div>
     <div class="hint">Clients connect to <span class="mono">127.0.0.1:<span id="ePortHint"></span></span> as TCI receiver 1.</div>
   </div>
@@ -156,11 +155,7 @@ input[type=number] { width: 72px; }
       <button class="btn light" id="btnDisconnect">Disconnect</button>
     </div>
     <div class="group">
-      <b>Audio</b>
-      <div class="field"><label for="audioPath">Audio path</label>
-        <select id="audioPath"><option value="radio">Direct from radio</option><option value="windows">Windows DAX devices</option></select></div>
-      <div class="field"><label for="txDev">DAX TX device</label><select id="txDev"></select></div>
-      <div>TX gain</div>
+      <b>TX gain</b>
       <div class="slider"><input id="txGain" type="range" min="-40" max="20" step="1"><span id="txGainVal" style="width:44px;text-align:right"></span></div>
       <div class="lvl"><div id="txLvl"></div></div>
     </div>
@@ -205,7 +200,7 @@ const $ = id => document.getElementById(id);
 const api = () => window.go.main.App;
 const LEVELS = { TRAFFIC: 0, DEBUG: 1, INFO: 2, WARN: 3, ERROR: 4 };
 const MAXLOG = 4000;
-let status = null, devices = { capture: [], render: [] };
+let status = null;
 let logEntries = [], lastLogId = 0;
 let selected = 0, editing = -1;
 
@@ -225,7 +220,6 @@ const fmtFreq = hz => { const s = String(hz).padStart(7, "0"); return s.slice(0,
 // Peak (0..1) to a 0..100% bar on a -60..0 dBFS scale, like DAX.
 const pct = peak => peak <= 0 ? 0 : Math.max(0, Math.min(100, (20 * Math.log10(peak) + 60) / 60 * 100));
 const gainOf = c => (c.rx_gain_db === null || c.rx_gain_db === undefined) ? -40 : c.rx_gain_db;
-const isWindows = () => status && status.config.audio_path === "windows";
 const open = id => $(id).classList.add("open");
 const close = id => $(id).classList.remove("open");
 const isOpen = id => $(id).classList.contains("open");
@@ -313,25 +307,15 @@ function onStatus(s) {
 }
 
 // ---------- edit dialog ----------
-function rxItems(selectedName, dax) {
-  if (!isWindows()) return [[selectedName, `Radio stream (DAX ${dax})`]];
-  const items = [["", `Auto (DAX Audio RX ${dax})`]].concat(devices.capture.map(d => [d.name, d.name]));
-  if (selectedName && !devices.capture.some(d => d.name === selectedName)) items.push([selectedName, selectedName + " (missing)"]);
-  return items;
-}
 function openEdit(i) {
   editing = i;
   const c = status.config.channels[i];
   $("editTitle").textContent = `Edit TCI-${c.slice}`;
   $("eSlice").value = c.slice; $("ePort").value = c.port; $("eDax").value = c.dax;
-  setOptions($("eRx"), rxItems(c.rx_device, c.dax), c.rx_device);
-  $("eRx").disabled = !isWindows();
   $("eGain").value = gainOf(c); $("eGainVal").textContent = gainOf(c) + " dB";
-  $("eGain").disabled = isWindows();
   $("ePortHint").textContent = c.port;
   open("editDlg");
 }
-$("eDax").onchange = () => { const cur = $("eRx").value; setOptions($("eRx"), rxItems(cur, $("eDax").value), cur); };
 $("ePort").oninput = () => $("ePortHint").textContent = $("ePort").value;
 $("eGain").oninput = () => $("eGainVal").textContent = $("eGain").value + " dB";
 $("eCancel").onclick = () => close("editDlg");
@@ -340,8 +324,7 @@ $("eReset").onclick = async () => {
   onStatus(await call("GetStatus")); openEdit(editing);
 };
 $("eOk").onclick = async () => {
-  const ch = { slice: $("eSlice").value, port: +$("ePort").value, dax: +$("eDax").value,
-               rx_device: $("eRx").value, rx_gain_db: +$("eGain").value };
+  const ch = { slice: $("eSlice").value, port: +$("ePort").value, dax: +$("eDax").value, rx_gain_db: +$("eGain").value };
   try { await call("UpdateChannel", editing, ch); } catch { return; }
   close("editDlg"); onStatus(await call("GetStatus"));
 };
@@ -356,19 +339,9 @@ function renderSettings(s, force) {
     setOptions($("radioSel"), items, s.radios.some(r => r.serial === want) ? want : "");
   }
   if (force) {
-    $("audioPath").value = c.audio_path;
     $("unkeyMs").value = c.unkey_timeout_ms; $("protoName").value = c.protocol_name;
     $("autoDax").checked = c.set_slice_dax; $("logTraffic").checked = c.log_traffic;
     $("txGain").value = c.tx_gain_db; $("txGainVal").textContent = c.tx_gain_db + " dB";
-  }
-  if (force || ae !== $("txDev")) {
-    let items;
-    if (c.audio_path === "windows") {
-      items = [["", "Auto (DAX Audio TX)"]].concat(devices.render.map(d => [d.name, d.name]));
-      if (c.tx_device && !devices.render.some(d => d.name === c.tx_device)) items.push([c.tx_device, c.tx_device + " (missing)"]);
-    } else items = [[c.tx_device, "Radio stream (dax_tx)"]];
-    setOptions($("txDev"), items, c.tx_device);
-    $("txDev").disabled = c.audio_path !== "windows";
   }
 }
 $("btnSettings").onclick = async () => {
@@ -383,11 +356,6 @@ $("btnConnect").onclick = () => {
   call("Connect", ip ? "" : serial, ip);
 };
 $("btnDisconnect").onclick = () => call("Disconnect");
-$("audioPath").onchange = async e => {
-  await call("SetAudioPath", e.target.value).catch(() => {});
-  status = await call("GetStatus"); renderSettings(status, false);
-};
-$("txDev").onchange = e => call("SetTXDevice", e.target.value);
 $("txGain").oninput = () => $("txGainVal").textContent = $("txGain").value + " dB";
 $("txGain").onchange = () => call("SetTXGain", +$("txGain").value);
 $("setSave").onclick = async () => {
@@ -474,8 +442,6 @@ async function init() {
   window.runtime.EventsOn("status", onStatus);
   window.runtime.EventsOn("log", addLogs);
   addLogs(await call("GetLogs", 0));
-  devices = await call("GetDevices");
-  devices.capture = devices.capture || []; devices.render = devices.render || [];
   onStatus(await call("GetStatus"));
   try { $("aboutLine").textContent = "Settings: " + (await api().ConfigDir()); } catch {}
 }

@@ -54,8 +54,8 @@ type Bridge struct {
 	render stopper
 	fifo   *audio.Fifo
 
-	// newRender opens the DAX TX device; replaced in tests.
-	newRender func(device string, pull func([]float32)) stopper
+	// newRender starts sending TX audio to the radio; replaced in tests.
+	newRender func(pull func([]float32)) stopper
 	dtx       *directTX
 	txPeak    atomic.Uint32 // float32 bits, TX audio peak since last status
 	dtxEpoch  atomic.Uint64 // radio session the dax_tx stream was prepared for
@@ -69,12 +69,7 @@ func New(l *logx.Logger, cfg *config.Store, onUI func()) *Bridge {
 	b.fifo = audio.NewFifo(audio.Rate) // up to 1 s of TX audio
 	b.radio = flex.NewRadio(l, b.onRadioUpdate)
 	b.dtx = newDirectTX(b.radio, l.Src("dax-tx"))
-	b.newRender = func(device string, pull func([]float32)) stopper {
-		if cfg.Get().AudioPath == config.PathWindows {
-			return audio.StartRender(l.Src("dax-tx"), device, audio.AutoTX, pull)
-		}
-		return b.dtx.start(pull)
-	}
+	b.newRender = b.dtx.start
 	b.disc = flex.NewDiscovery(l, b.notifyUI)
 	return b
 }
@@ -150,14 +145,6 @@ func (b *Bridge) SelectStation(name string) {
 	b.radio.SetStation(name)
 }
 
-// RestartAudio reopens every channel's RX audio (after the audio path changed).
-// TX picks up the new path on the next key.
-func (b *Bridge) RestartAudio() {
-	for _, ch := range b.channelList() {
-		ch.restartCapture()
-	}
-}
-
 // ApplyChannels starts, stops or restarts listeners to match the config.
 // Channels whose settings did not change keep their clients.
 func (b *Bridge) ApplyChannels() {
@@ -207,7 +194,7 @@ func (b *Bridge) onRadioUpdate() {
 	snap := b.radio.Snapshot()
 	// Create the dax_tx stream once per session, as soon as we are bound, so
 	// the first key does not wait for the radio.
-	if snap.Connected && snap.BoundHandle != 0 && b.cfg.Get().AudioPath == config.PathRadio {
+	if snap.Connected && snap.BoundHandle != 0 {
 		if e := b.radio.Epoch(); b.dtxEpoch.Swap(e) != e {
 			go b.dtx.prepare()
 		}
@@ -295,7 +282,7 @@ func (b *Bridge) requestTX(c *client, tciAudio, tune bool) error {
 	// Open the TX audio sink outside the lock: it may talk to the radio or
 	// a sound device, and nothing else may wait on b.mu meanwhile.
 	if openRender {
-		r := b.newRender(b.cfg.Get().TXDevice, b.pullTX)
+		r := b.newRender(b.pullTX)
 		b.mu.Lock()
 		if b.tx == o && b.render == nil {
 			b.render, r = r, nil
@@ -453,12 +440,12 @@ func (b *Bridge) txLoop() {
 		}
 		if silent := time.Since(o.lastAudio); silent > timeout {
 			// If the FIFO is still full the client was fine; the DAX TX
-			// device is not taking audio.
-			deviceStalled := o.blocks > 0 && b.fifo.Frames() >= o.c.txBufferMs()*audio.Rate/1000
+			// stream to the radio is not taking audio.
+			stalled := o.blocks > 0 && b.fifo.Frames() >= o.c.txBufferMs()*audio.Rate/1000
 			b.mu.Unlock()
-			if deviceStalled {
-				b.lg.Error("SAFETY: DAX TX device is not consuming audio (check the DAX TX device and that DAX is running)")
-				b.releaseTX(o.c, "DAX TX device stalled (safety unkey)")
+			if stalled {
+				b.lg.Error("SAFETY: TX audio is not being sent to the radio (DAX TX stream stalled)")
+				b.releaseTX(o.c, "DAX TX stream stalled (safety unkey)")
 			} else {
 				b.lg.Warn("SAFETY: no TX audio from client #%d for %d ms", o.c.id, silent.Milliseconds())
 				b.releaseTX(o.c, "TX audio stopped (safety unkey)")

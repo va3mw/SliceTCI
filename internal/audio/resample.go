@@ -1,9 +1,15 @@
+// Package audio has the sample-rate converter and FIFO used between the
+// radio's DAX streams and TCI clients. Internally all audio is interleaved
+// stereo float32 at Rate.
 package audio
 
 import (
 	"math"
 	"sync"
 )
+
+// Rate is the internal sample rate.
+const Rate = 48000
 
 // Resampler converts interleaved float32 audio between sample rates. It uses a
 // windowed-sinc low-pass before decimation and linear interpolation. That is

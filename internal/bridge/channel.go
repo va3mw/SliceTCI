@@ -15,7 +15,6 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/va3mw/FlexTCI/internal/audio"
 	"github.com/va3mw/FlexTCI/internal/config"
 	"github.com/va3mw/FlexTCI/internal/flex"
 	"github.com/va3mw/FlexTCI/internal/logx"
@@ -272,13 +271,8 @@ func (ch *Channel) updateCapture() {
 	}
 	var stop stopper
 	if need && ch.capture == nil {
-		if ch.b.cfg.Get().AudioPath == config.PathWindows {
-			ch.lg.Info("starting RX audio from Windows device %s", deviceLabel(ch.cfg.RXDevice, fmt.Sprintf("auto: DAX Audio RX %d", ch.cfg.DAX)))
-			ch.capture = audio.StartCapture(ch.lg, ch.cfg.RXDevice, audio.AutoRXPattern(ch.cfg.DAX), ch.onRX)
-		} else {
-			ch.lg.Info("starting RX audio direct from the radio (DAX channel %d)", ch.cfg.DAX)
-			ch.capture = startDirectRX(ch.b.radio, ch.lg, ch.cfg.DAX, ch.rxGainLinear, ch.onRX)
-		}
+		ch.lg.Info("starting RX audio from the radio (DAX channel %d)", ch.cfg.DAX)
+		ch.capture = startDirectRX(ch.b.radio, ch.lg, ch.cfg.DAX, ch.rxGainLinear, ch.onRX)
 	} else if !need && ch.capture != nil {
 		stop = ch.capture
 		ch.capture = nil
@@ -288,25 +282,6 @@ func (ch *Channel) updateCapture() {
 		ch.lg.Info("no clients want RX audio; closing the RX audio stream")
 		go stop.Stop()
 	}
-}
-
-// restartCapture reopens RX audio, e.g. after the audio path setting changed.
-func (ch *Channel) restartCapture() {
-	ch.mu.Lock()
-	old := ch.capture
-	ch.capture = nil
-	ch.mu.Unlock()
-	if old != nil {
-		old.Stop()
-	}
-	ch.updateCapture()
-}
-
-func deviceLabel(name, auto string) string {
-	if name == "" {
-		return auto
-	}
-	return name
 }
 
 func (ch *Channel) onRX(s []float32) {
@@ -338,7 +313,6 @@ type ChannelStatus struct {
 	Slice     string         `json:"slice"`
 	Port      int            `json:"port"`
 	DAX       int            `json:"dax"`
-	RXDevice  string         `json:"rx_device"`
 	Listening bool           `json:"listening"`
 	Error     string         `json:"error"`
 	Present   bool           `json:"present"`
@@ -355,7 +329,7 @@ func (ch *Channel) status() ChannelStatus {
 	ch.mu.Lock()
 	defer ch.mu.Unlock()
 	st := ChannelStatus{
-		Index: ch.idx, Slice: ch.cfg.Slice, Port: ch.cfg.Port, DAX: ch.cfg.DAX, RXDevice: ch.cfg.RXDevice,
+		Index: ch.idx, Slice: ch.cfg.Slice, Port: ch.cfg.Port, DAX: ch.cfg.DAX,
 		Listening: ch.ln != nil, Error: ch.listenErr,
 		Present: ch.last.Present, FreqHz: ch.last.Freq, Mode: ch.last.Mode, TRX: ch.last.TRX || ch.last.Tune,
 		TXEnable: ch.last.TXEnable, RXLevel: ch.rxPeak, Audio: ch.capture != nil,

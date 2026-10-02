@@ -284,7 +284,6 @@ func TestEndToEnd(t *testing.T) {
 	cfg.Update(func(c *config.Config) {
 		c.Channels[0].Port = tciPort
 		c.UnkeyTimeoutMs = 800
-		c.TXDevice = "__no_such_device__" // never touch real audio hardware in tests
 		c.AutoConnect = false
 	})
 	l := logx.New(dir)
@@ -292,7 +291,7 @@ func TestEndToEnd(t *testing.T) {
 	l.SetTraffic(true)
 	l.OnEntry(func(e logx.Entry) { t.Logf("%s %-5s %-9s %s", e.Time, e.Level, e.Source, e.Msg) })
 	b := New(l, cfg, nil)
-	b.newRender = func(_ string, pull func([]float32)) stopper { return startFakeRender(pull) }
+	b.newRender = func(pull func([]float32)) stopper { return startFakeRender(pull) }
 	b.Start()
 	defer b.Shutdown()
 	if err := b.Connect("", "127.0.0.1"); err != nil {
@@ -444,7 +443,6 @@ func TestDirectAudio(t *testing.T) {
 		zero := 0
 		c.Channels[0].RXGainDB = &zero
 		c.AutoConnect = false
-		c.AudioPath = config.PathRadio
 	})
 	l := logx.New(dir)
 	defer l.Close()

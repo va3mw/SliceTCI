@@ -10,7 +10,6 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"github.com/va3mw/FlexTCI/internal/audio"
 	"github.com/va3mw/FlexTCI/internal/bridge"
 	"github.com/va3mw/FlexTCI/internal/config"
 	"github.com/va3mw/FlexTCI/internal/logx"
@@ -75,26 +74,6 @@ func (a *App) GetStatus() bridge.Status { return a.bridge.Status() }
 
 func (a *App) GetLogs(since uint64) []logx.Entry { return a.log.Since(since) }
 
-type Devices struct {
-	Capture []audio.Device `json:"capture"`
-	Render  []audio.Device `json:"render"`
-	Error   string         `json:"error"`
-}
-
-func (a *App) GetDevices() Devices {
-	var d Devices
-	var errs []string
-	var err error
-	if d.Capture, err = audio.ListDevices(true); err != nil {
-		errs = append(errs, err.Error())
-	}
-	if d.Render, err = audio.ListDevices(false); err != nil {
-		errs = append(errs, err.Error())
-	}
-	d.Error = strings.Join(errs, "; ")
-	return d
-}
-
 func (a *App) Connect(serial, ip string) error {
 	return a.bridge.Connect(serial, strings.TrimSpace(ip))
 }
@@ -129,7 +108,7 @@ func (a *App) UpdateChannel(i int, ch config.Channel) error {
 		return err
 	}
 	a.cfg.Update(func(c *config.Config) { c.Channels[i] = ch })
-	a.log.Log(logx.Info, "app", "channel %d: Slice %s, port %d, DAX %d, RX device %q", i+1, ch.Slice, ch.Port, ch.DAX, ch.RXDevice)
+	a.log.Log(logx.Info, "app", "channel %d: Slice %s, port %d, DAX %d, RX gain %d dB", i+1, ch.Slice, ch.Port, ch.DAX, ch.RXGain())
 	a.bridge.ApplyChannels()
 	return nil
 }
@@ -233,34 +212,6 @@ func validate(c config.Config) error {
 		ports[ch.Port], slices[ch.Slice] = i, i
 	}
 	return nil
-}
-
-func (a *App) SetTXDevice(name string) {
-	a.cfg.Update(func(c *config.Config) { c.TXDevice = name })
-	a.log.Log(logx.Info, "app", "DAX TX device: %s (applies on next key)", orAuto(name))
-}
-
-// SetAudioPath picks "radio" (direct VITA-49) or "windows" (DAX sound devices).
-func (a *App) SetAudioPath(path string) error {
-	if path != config.PathRadio && path != config.PathWindows {
-		return fmt.Errorf("unknown audio path %q", path)
-	}
-	if a.cfg.Get().AudioPath == path {
-		return nil
-	}
-	a.cfg.Update(func(c *config.Config) { c.AudioPath = path })
-	label := map[string]string{config.PathRadio: "direct from the radio", config.PathWindows: "Windows DAX devices"}[path]
-	a.log.Log(logx.Info, "app", "audio path: %s", label)
-	a.bridge.RestartAudio()
-	a.pushStatus()
-	return nil
-}
-
-func orAuto(s string) string {
-	if s == "" {
-		return "auto"
-	}
-	return s
 }
 
 type Options struct {
