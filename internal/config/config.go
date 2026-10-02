@@ -18,10 +18,30 @@ const (
 )
 
 type Channel struct {
-	Slice    string `json:"slice"`     // slice letter A..H
-	Port     int    `json:"port"`      // TCI WebSocket port
-	DAX      int    `json:"dax"`       // DAX channel set on the slice (1..8)
-	RXDevice string `json:"rx_device"` // capture device friendly name; "" = auto (DAX Audio RX n)
+	Slice    string `json:"slice"`                // slice letter A..H
+	Port     int    `json:"port"`                 // TCI WebSocket port
+	DAX      int    `json:"dax"`                  // DAX channel set on the slice (1..8)
+	RXDevice string `json:"rx_device"`            // capture device friendly name; "" = auto (DAX Audio RX n)
+	RXGainDB *int   `json:"rx_gain_db,omitempty"` // direct path only; nil = default
+}
+
+// DefaultRXGainDB brings the radio's full-scale DAX stream down to the level
+// digital-mode apps expect (WSJT-X wants roughly 30 dB on its meter; the raw
+// stream reads about 76 dB).
+const DefaultRXGainDB = -40
+
+// RXGain returns the channel's RX gain in dB.
+func (c Channel) RXGain() int {
+	if c.RXGainDB == nil {
+		return DefaultRXGainDB
+	}
+	return *c.RXGainDB
+}
+
+// SameExceptGain reports whether two channels differ only in RX gain, which
+// can change without restarting the listener.
+func (c Channel) SameExceptGain(o Channel) bool {
+	return c.Slice == o.Slice && c.Port == o.Port && c.DAX == o.DAX && c.RXDevice == o.RXDevice
 }
 
 type Config struct {
@@ -32,6 +52,7 @@ type Config struct {
 	Channels       []Channel `json:"channels"`
 	AudioPath      string    `json:"audio_path"` // "radio" (VITA-49 direct) or "windows" (DAX sound devices)
 	TXDevice       string    `json:"tx_device"`  // render device friendly name; "" = auto (DAX Audio TX)
+	TXGainDB       int       `json:"tx_gain_db"` // direct path TX audio trim
 	UnkeyTimeoutMs int       `json:"unkey_timeout_ms"`
 	ProtocolName   string    `json:"protocol_name"`
 	SetSliceDAX    bool      `json:"set_slice_dax"`

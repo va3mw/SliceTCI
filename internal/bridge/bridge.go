@@ -55,6 +55,8 @@ type Bridge struct {
 
 	// newRender opens the DAX TX device; replaced in tests.
 	newRender func(device string, pull func([]float32)) stopper
+	dtx       *directTX
+	dtxEpoch  atomic.Uint64 // radio session the dax_tx stream was prepared for
 
 	uiDirty atomic.Bool
 	quit    chan struct{}
@@ -64,12 +66,12 @@ func New(l *logx.Logger, cfg *config.Store, onUI func()) *Bridge {
 	b := &Bridge{log: l, lg: l.Src("bridge"), cfg: cfg, onUI: onUI, quit: make(chan struct{})}
 	b.fifo = audio.NewFifo(audio.Rate) // up to 1 s of TX audio
 	b.radio = flex.NewRadio(l, b.onRadioUpdate)
-	dtx := newDirectTX(b.radio, l.Src("dax-tx"))
+	b.dtx = newDirectTX(b.radio, l.Src("dax-tx"), func() float32 { return dbToGain(float64(cfg.Get().TXGainDB)) })
 	b.newRender = func(device string, pull func([]float32)) stopper {
 		if cfg.Get().AudioPath == config.PathWindows {
 			return audio.StartRender(l.Src("dax-tx"), device, audio.AutoTX, pull)
 		}
-		return dtx.start(pull)
+		return b.dtx.start(pull)
 	}
 	b.disc = flex.NewDiscovery(l, b.notifyUI)
 	return b
@@ -163,7 +165,11 @@ func (b *Bridge) ApplyChannels() {
 	for i := 0; i < config.MaxChannels; i++ {
 		want := i < c.ChannelCount
 		cur := b.channels[i]
-		if cur != nil && (!want || cur.cfg != c.Channels[i]) {
+		if cur != nil && want && cur.cfg.SameExceptGain(c.Channels[i]) {
+			cur.setRXGain(c.Channels[i].RXGain()) // gain changes don't drop clients
+			continue
+		}
+		if cur != nil {
 			cur.stop()
 			b.channels[i] = nil
 			cur = nil
@@ -197,6 +203,13 @@ func (b *Bridge) channelList() []*Channel {
 
 func (b *Bridge) onRadioUpdate() {
 	snap := b.radio.Snapshot()
+	// Create the dax_tx stream once per session, as soon as we are bound, so
+	// the first key does not wait for the radio.
+	if snap.Connected && snap.BoundHandle != 0 && b.cfg.Get().AudioPath == config.PathRadio {
+		if e := b.radio.Epoch(); b.dtxEpoch.Swap(e) != e {
+			go b.dtx.prepare()
+		}
+	}
 	for _, ch := range b.channelList() {
 		ch.sync(&snap)
 	}
@@ -265,18 +278,31 @@ func (b *Bridge) requestTX(c *client, tciAudio, tune bool) error {
 	}
 	o.tciAudio, o.tune = tciAudio, tune
 	o.lastAudio, o.outstanding = now, 0
-	var setDAX bool
+	var setDAX, openRender bool
 	if tciAudio {
 		if b.render == nil {
 			b.fifo.Reset()
-			cfg := b.cfg.Get()
-			b.render = b.newRender(cfg.TXDevice, func(out []float32) { b.fifo.Read(out) })
+			openRender = true
 		}
 		if !isDigital(sl.Mode) && !snap.TX.DAX && !o.restoreDAX {
 			o.restoreDAX, setDAX = true, true
 		}
 	}
 	b.mu.Unlock()
+
+	// Open the TX audio sink outside the lock: it may talk to the radio or
+	// a sound device, and nothing else may wait on b.mu meanwhile.
+	if openRender {
+		r := b.newRender(b.cfg.Get().TXDevice, func(out []float32) { b.fifo.Read(out) })
+		b.mu.Lock()
+		if b.tx == o && b.render == nil {
+			b.render, r = r, nil
+		}
+		b.mu.Unlock()
+		if r != nil { // released (or replaced) while opening
+			r.Stop()
+		}
+	}
 
 	if !sl.TX {
 		b.lg.Info("making Slice %s the TX slice", sl.Letter)
@@ -330,7 +356,7 @@ func (b *Bridge) releaseTX(c *client, reason string) {
 		stats = fmt.Sprintf(", %d TX_CHRONO sent, %d audio blocks received", o.chronos, o.blocks)
 	}
 	b.lg.Info("unkeyed Slice %s (client #%d): %s, keyed %.1f s%s", c.ch.cfg.Slice, c.id, reason, time.Since(o.since).Seconds(), stats)
-	c.ch.pinAndBroadcast("trx", false, func(v *view) { v.TRX, v.Tune = false, false })
+	c.ch.pinAndBroadcast(nil, "trx", false, func(v *view) { v.TRX, v.Tune = false, false })
 	b.notifyUI()
 }
 

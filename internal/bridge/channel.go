@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -40,11 +41,26 @@ type Channel struct {
 	capture   stopper
 	listenErr string
 	rxPeak    float32
-	daxSetFor int // slice index we last set dax= on
+	rxGain    atomic.Uint32 // float32 bits, linear; direct path only
+	daxSetFor int           // slice index we last set dax= on
 }
 
+func (ch *Channel) setRXGain(db int) {
+	ch.rxGain.Store(math.Float32bits(dbToGain(float64(db))))
+	ch.mu.Lock()
+	changed := ch.cfg.RXGain() != db
+	v := db
+	ch.cfg.RXGainDB = &v
+	ch.mu.Unlock()
+	if changed {
+		ch.lg.Info("RX gain %d dB", db)
+	}
+}
+
+func (ch *Channel) rxGainLinear() float32 { return math.Float32frombits(ch.rxGain.Load()) }
+
 func newChannel(b *Bridge, idx int, cfg config.Channel) *Channel {
-	return &Channel{
+	ch := &Channel{
 		b:         b,
 		idx:       idx,
 		cfg:       cfg,
@@ -54,6 +70,8 @@ func newChannel(b *Bridge, idx int, cfg config.Channel) *Channel {
 		last:      view{SliceIdx: -1},
 		daxSetFor: -1,
 	}
+	ch.rxGain.Store(math.Float32bits(dbToGain(float64(cfg.RXGain()))))
+	return ch
 }
 
 var upgrader = websocket.Upgrader{
@@ -209,8 +227,10 @@ func (ch *Channel) ensureSliceDAX() {
 	ch.b.radio.SetSlice(sl.Index, fmt.Sprintf("dax=%d", ch.cfg.DAX))
 }
 
-// pinAndBroadcast records an optimistic value and echoes it to every client.
-func (ch *Channel) pinAndBroadcast(key string, val any, apply func(v *view)) {
+// pinAndBroadcast records an optimistic value and pushes any change to every
+// client. The originating client always gets echo, even when nothing changed:
+// clients (WSJT-X) wait for the echo of every set they send.
+func (ch *Channel) pinAndBroadcast(origin *client, key string, val any, apply func(v *view), echo ...string) {
 	ch.mu.Lock()
 	ch.pins[key] = pin{val: val, until: time.Now().Add(pinHold)}
 	old := ch.last
@@ -220,6 +240,9 @@ func (ch *Channel) pinAndBroadcast(key string, val any, apply func(v *view)) {
 	ch.mu.Unlock()
 	for _, c := range cl {
 		c.sendText(lines...)
+	}
+	if len(lines) == 0 && origin != nil {
+		origin.sendText(echo...)
 	}
 }
 
@@ -254,7 +277,7 @@ func (ch *Channel) updateCapture() {
 			ch.capture = audio.StartCapture(ch.lg, ch.cfg.RXDevice, audio.AutoRXPattern(ch.cfg.DAX), ch.onRX)
 		} else {
 			ch.lg.Info("starting RX audio direct from the radio (DAX channel %d)", ch.cfg.DAX)
-			ch.capture = startDirectRX(ch.b.radio, ch.lg, ch.cfg.DAX, ch.onRX)
+			ch.capture = startDirectRX(ch.b.radio, ch.lg, ch.cfg.DAX, ch.rxGainLinear, ch.onRX)
 		}
 	} else if !need && ch.capture != nil {
 		stop = ch.capture

@@ -294,14 +294,27 @@ func (c *client) dispatch(cmd tci.Command) {
 				ch.lg.Debug("#%d VFO B set not supported (split not mapped yet); echoing VFO A", c.id)
 			} else if idx := needSlice(); idx >= 0 {
 				b.radio.Tune(idx, hz)
-				ch.pinAndBroadcast("freq", hz, func(v *view) { v.Freq = hz })
+				ch.pinAndBroadcast(c, "freq", hz, func(v *view) { v.Freq = hz }, freqLines(hz)...)
 				return
 			}
 		}
 		c.sendText(tci.Fmt("vfo", 0, a[1], ch.currentView().Freq))
 	case "dds":
-		// Panadapter centre is not exposed; report the slice frequency.
-		c.sendText(tci.Fmt("dds", 0, v.Freq))
+		// The panadapter centre is not exposed separately: DDS and VFO A
+		// both mean the slice frequency. Some clients tune with DDS (Hamlib
+		// sends DDS then VFO), so a DDS set must tune or they wait.
+		if len(a) >= 2 {
+			if hz, err := strconv.ParseInt(a[1], 10, 64); err == nil && hz > 0 {
+				if idx := needSlice(); idx >= 0 {
+					if hz != v.Freq {
+						b.radio.Tune(idx, hz)
+					}
+					ch.pinAndBroadcast(c, "freq", hz, func(v *view) { v.Freq = hz }, freqLines(hz)...)
+					return
+				}
+			}
+		}
+		c.sendText(tci.Fmt("dds", 0, ch.currentView().Freq))
 	case "if":
 		if len(a) >= 2 {
 			c.sendText(tci.Fmt("if", 0, a[1], 0))
@@ -314,7 +327,7 @@ func (c *client) dispatch(cmd tci.Command) {
 			} else if idx := needSlice(); idx >= 0 {
 				name := tci.FlexToTCI(mode)
 				b.radio.Command("slice set "+strconv.Itoa(idx)+" mode="+mode, b.resyncOnError(ch))
-				ch.pinAndBroadcast("mode", name, func(v *view) { v.Mode = name })
+				ch.pinAndBroadcast(c, "mode", name, func(v *view) { v.Mode = name }, tci.Fmt("modulation", 0, name))
 				return
 			}
 		}
@@ -346,10 +359,10 @@ func (c *client) dispatch(cmd tci.Command) {
 					c.sendText(tci.Fmt("trx", 0, false))
 					return
 				}
-				ch.pinAndBroadcast("trx", true, func(v *view) { v.TRX = true })
+				ch.pinAndBroadcast(c, "trx", true, func(v *view) { v.TRX = true }, tci.Fmt("trx", 0, true))
 			} else {
 				b.unkeyRequest(c, "client unkeyed")
-				ch.pinAndBroadcast("trx", false, func(v *view) { v.TRX = false })
+				ch.pinAndBroadcast(c, "trx", false, func(v *view) { v.TRX = false }, tci.Fmt("trx", 0, false))
 			}
 			return
 		}
@@ -366,10 +379,10 @@ func (c *client) dispatch(cmd tci.Command) {
 					c.sendText(tci.Fmt("tune", 0, false))
 					return
 				}
-				ch.pinAndBroadcast("tune", true, func(v *view) { v.Tune = true })
+				ch.pinAndBroadcast(c, "tune", true, func(v *view) { v.Tune = true }, tci.Fmt("tune", 0, true))
 			} else {
 				b.unkeyRequest(c, "client ended tune")
-				ch.pinAndBroadcast("tune", false, func(v *view) { v.Tune = false })
+				ch.pinAndBroadcast(c, "tune", false, func(v *view) { v.Tune = false }, tci.Fmt("tune", 0, false))
 			}
 			return
 		}
@@ -383,9 +396,9 @@ func (c *client) dispatch(cmd tci.Command) {
 				}
 				b.radio.SetTransmit(key + "=" + strconv.Itoa(p))
 				if cmd.Name == "drive" {
-					ch.pinAndBroadcast("drive", p, func(v *view) { v.Drive = p })
+					ch.pinAndBroadcast(c, "drive", p, func(v *view) { v.Drive = p }, tci.Fmt("drive", 0, p))
 				} else {
-					ch.pinAndBroadcast("tune_drive", p, func(v *view) { v.TuneDrive = p })
+					ch.pinAndBroadcast(c, "tune_drive", p, func(v *view) { v.TuneDrive = p }, tci.Fmt("tune_drive", 0, p))
 				}
 				return
 			}

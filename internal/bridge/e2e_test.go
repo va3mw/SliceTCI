@@ -144,8 +144,10 @@ func (f *fakeRadio) serve() {
 			send(fmt.Sprintf("S0000ABCD|stream 0x%08X type=dax_rx dax_channel=1 slice=A client_handle=0x0000ABCD gain=50", fakeRXStream))
 			go f.sendRX()
 		case cmd == "stream create type=dax_tx":
-			send("R" + seq + fmt.Sprintf("|0|%08X", fakeTXStream))
+			// The real radio sends the status before the reply (seen on a
+			// 6600M); this ordering once deadlocked keying for 5 s.
 			send(fmt.Sprintf("S0000ABCD|stream 0x%08X type=dax_tx client_handle=0x0000ABCD tx=1", fakeTXStream))
+			send("R" + seq + fmt.Sprintf("|0|%08X", fakeTXStream))
 		case cmd == "info":
 			send("R" + seq + `|0|model="FLEX-6600M",chassis_serial="1234",name="RXb-VA3MW",callsign="VA3MW"`)
 		case cmd == "sub interlock all" || cmd == "client program FlexTCI":
@@ -356,6 +358,16 @@ func TestEndToEnd(t *testing.T) {
 	c.expect(t, "vfo:0,0,7074000;", time.Second)
 	radio.expect(t, "slice tune 0 7.074000", time.Second)
 
+	// Setting the frequency it is already on must still be echoed: clients
+	// wait for the echo of every set.
+	time.Sleep(100 * time.Millisecond)
+	c.send("VFO:0,0,7074000;")
+	c.expect(t, "vfo:0,0,7074000;", time.Second)
+	c.send("DDS:0,7074000;")
+	c.expect(t, "dds:0,7074000;", time.Second)
+	c.send("MODULATION:0,DIGU;")
+	c.expect(t, "modulation:0,digu;", time.Second)
+
 	// Mode set.
 	c.send("MODULATION:0,USB;")
 	c.expect(t, "modulation:0,usb;", time.Second)
@@ -429,6 +441,8 @@ func TestDirectAudio(t *testing.T) {
 	cfg := config.LoadFrom(filepath.Join(dir, "config.json"))
 	cfg.Update(func(c *config.Config) {
 		c.Channels[0].Port = tciPort
+		zero := 0
+		c.Channels[0].RXGainDB = &zero
 		c.AutoConnect = false
 		c.AudioPath = config.PathRadio
 	})
@@ -468,10 +482,35 @@ func TestDirectAudio(t *testing.T) {
 		}
 	}
 
-	// TX: key with TCI audio, answer chronos with 0.1, expect dax_tx packets.
+	// RX gain changes apply live without dropping the client.
+	b.cfg.Update(func(c *config.Config) { g := -20; c.Channels[0].RXGainDB = &g })
+	b.ApplyChannels()
+	for len(c.rx) > 0 {
+		<-c.rx
+	}
+	deadline = time.After(3 * time.Second)
+	for good = 0; good < 3; {
+		select {
+		case s := <-c.rx:
+			if v := s[len(s)-1]; v > 0.024 && v < 0.026 { // 0.25 at -20 dB
+				good++
+			}
+		case <-deadline:
+			t.Fatalf("RX gain change not applied (%d good frames)", good)
+		}
+	}
+
+	// The dax_tx stream is prepared at connect, so keying must be fast.
+	if !radio.sent("stream create type=dax_tx") {
+		t.Fatal("dax_tx stream was not prepared at connect")
+	}
+	keyed := time.Now()
 	c.send("TRX:0,true,tci;")
-	radio.expect(t, "stream create type=dax_tx", 2*time.Second)
 	radio.expect(t, "xmit 1", time.Second)
+	if d := time.Since(keyed); d > 300*time.Millisecond {
+		t.Errorf("keying took %v", d)
+	}
+	c.expect(t, "trx:0,true;", time.Second)
 	for len(radio.txPackets) > 0 {
 		<-radio.txPackets
 	}

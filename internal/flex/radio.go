@@ -114,6 +114,7 @@ var APIPort = "4992"
 type Radio struct {
 	log      *logx.Source
 	onUpdate func()
+	notifyCh chan struct{}
 
 	mu          sync.Mutex
 	conn        net.Conn
@@ -139,7 +140,20 @@ type Radio struct {
 }
 
 func NewRadio(l *logx.Logger, onUpdate func()) *Radio {
-	return &Radio{log: l.Src("radio"), onUpdate: onUpdate}
+	r := &Radio{log: l.Src("radio"), onUpdate: onUpdate, notifyCh: make(chan struct{}, 1)}
+	go r.notifyLoop()
+	return r
+}
+
+// notifyLoop delivers state-change callbacks on their own goroutine, so the
+// connection reader never waits on (or deadlocks with) the bridge. Bursts of
+// status lines collapse into one callback.
+func (r *Radio) notifyLoop() {
+	for range r.notifyCh {
+		if r.onUpdate != nil {
+			r.onUpdate()
+		}
+	}
 }
 
 // Connect starts a connection loop that reconnects until Disconnect is called.
@@ -621,8 +635,9 @@ func (r *Radio) tryBind() {
 }
 
 func (r *Radio) notify() {
-	if r.onUpdate != nil {
-		r.onUpdate()
+	select {
+	case r.notifyCh <- struct{}{}:
+	default: // an update is already pending
 	}
 }
 

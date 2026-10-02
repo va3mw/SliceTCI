@@ -14,7 +14,8 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   font: 13px "Segoe UI", system-ui, sans-serif; }
-body { display: flex; flex-direction: column; }
+body { display: flex; flex-direction: column; user-select: none; }
+input, #log { user-select: text; }
 header { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
   background: var(--panel); border-bottom: 1px solid var(--line); }
 header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .3px; }
@@ -56,7 +57,7 @@ tr:last-child td { border-bottom: none; }
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
 #logbar { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 #logbar h2 { margin: 0 8px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); }
-#log { flex: 1; overflow: auto; font-family: var(--mono); font-size: 12px; padding: 6px 10px; white-space: pre-wrap; word-break: break-all; }
+#log { flex: 1; overflow: auto; outline: none; font-family: var(--mono); font-size: 12px; padding: 6px 10px; white-space: pre-wrap; word-break: break-all; }
 .l { line-height: 1.45; }
 .l .t { color: #6c7486; } .l .s { color: #7aa7d9; }
 .l.TRAFFIC { color: #8b93a3; } .l.DEBUG { color: #b2b8c4; }
@@ -114,6 +115,8 @@ tr:last-child td { border-bottom: none; }
         <label for="protoName" title="First argument of PROTOCOL: in the init burst">Protocol name</label>
         <input id="protoName" style="width:110px">
         <label><input id="autoDax" type="checkbox"> Set slice DAX channel</label>
+        <label for="txGain" title="Trim applied to TCI TX audio sent to the radio (direct path)">TX gain (dB)</label>
+        <input id="txGain" type="number" min="-40" max="20" step="1" style="width:60px">
         <button id="btnOptions">Save</button>
       </div>
     </section>
@@ -129,7 +132,7 @@ tr:last-child td { border-bottom: none; }
     </div>
     <table>
       <thead><tr>
-        <th>#</th><th>Slice</th><th>TCI port</th><th>DAX ch</th><th>RX audio source</th><th></th>
+        <th>#</th><th>Slice</th><th>TCI port</th><th>DAX ch</th><th>RX audio source</th><th title="RX level trim for the direct path; aim for about 30 dB on the WSJT-X meter">RX dB</th><th></th>
         <th>Status</th><th>Frequency</th><th>Mode</th><th>RX</th><th>Clients</th>
       </tr></thead>
       <tbody id="chanBody"></tbody>
@@ -249,6 +252,7 @@ function buildChannelRows() {
       <td><input data-f="port" type="number" min="1024" max="65535"></td>
       <td><select data-f="dax">${[1,2,3,4,5,6,7,8].map(d => `<option>${d}</option>`).join("")}</select></td>
       <td><select data-f="rx" style="max-width:260px"></select></td>
+      <td><input data-f="gain" type="number" min="-80" max="20" step="1" style="width:60px"></td>
       <td><button data-a="apply" disabled>Apply</button> <button data-a="reset" title="Back to defaults">↺</button></td>
       <td data-s="status"></td>
       <td data-s="freq" class="freq"></td>
@@ -260,10 +264,12 @@ function buildChannelRows() {
     setOptions(q("rx"), deviceOptions(c.rx_device, c.dax), c.rx_device);
     q("rx").disabled = !isWindowsPath();
     const apply = tr.querySelector("[data-a=apply]");
-    const read = () => ({ slice: q("slice").value, port: +q("port").value, dax: +q("dax").value, rx_device: q("rx").value });
+    const gainOf = o => (o.rx_gain_db === null || o.rx_gain_db === undefined) ? -40 : o.rx_gain_db;
+    q("gain").value = gainOf(c);
+    const read = () => ({ slice: q("slice").value, port: +q("port").value, dax: +q("dax").value, rx_device: q("rx").value, rx_gain_db: +q("gain").value });
     const dirty = () => {
       const v = read(), o = status.config.channels[i];
-      apply.disabled = v.slice === o.slice && v.port === o.port && v.dax === o.dax && v.rx_device === o.rx_device;
+      apply.disabled = v.slice === o.slice && v.port === o.port && v.dax === o.dax && v.rx_device === o.rx_device && v.rx_gain_db === gainOf(o);
     };
     tr.querySelectorAll("[data-f]").forEach(el => el.addEventListener("input", dirty));
     q("dax").addEventListener("change", () => {
@@ -308,7 +314,8 @@ function updateChannelStatus() {
 function renderOptions(s, force) {
   const c = s.config;
   const ae = document.activeElement;
-  if (force || ![$("unkeyMs"), $("protoName")].includes(ae)) {
+  if (force || ![$("unkeyMs"), $("protoName"), $("txGain")].includes(ae)) {
+    $("txGain").value = c.tx_gain_db;
     $("unkeyMs").value = c.unkey_timeout_ms; $("protoName").value = c.protocol_name;
     $("autoDax").checked = c.set_slice_dax;
   }
@@ -391,7 +398,7 @@ async function init() {
   $("btnRefreshDev").onclick = refreshDevices;
   const saveOptions = () => call("SetOptions", {
     unkey_timeout_ms: +$("unkeyMs").value, protocol_name: $("protoName").value,
-    set_slice_dax: $("autoDax").checked, log_traffic: $("logTraffic").checked,
+    set_slice_dax: $("autoDax").checked, log_traffic: $("logTraffic").checked, tx_gain_db: +$("txGain").value,
   });
   $("btnOptions").onclick = saveOptions;
   $("logTraffic").onchange = saveOptions;
@@ -403,6 +410,16 @@ async function init() {
     navigator.clipboard.writeText(text).then(() => toast("Log copied to clipboard"));
   };
   $("btnLogFolder").onclick = () => call("OpenLogFolder");
+  // Ctrl+A selects the log text only, not the whole window.
+  $("log").tabIndex = 0;
+  document.addEventListener("keydown", e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" &&
+        !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) {
+      e.preventDefault();
+      const r = document.createRange(); r.selectNodeContents($("log"));
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    }
+  });
 
   window.runtime.EventsOn("status", onStatus);
   window.runtime.EventsOn("log", addLogs);

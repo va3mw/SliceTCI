@@ -152,6 +152,9 @@ func validate(c config.Config) error {
 		if ch.DAX < 1 || ch.DAX > 8 {
 			return fmt.Errorf("channel %d: DAX channel must be 1-8", i+1)
 		}
+		if g := ch.RXGain(); g < -80 || g > 20 {
+			return fmt.Errorf("channel %d: RX gain must be -80 to +20 dB", i+1)
+		}
 		if j, ok := ports[ch.Port]; ok {
 			return fmt.Errorf("channels %d and %d both use port %d", j+1, i+1, ch.Port)
 		}
@@ -196,6 +199,7 @@ type Options struct {
 	ProtocolName   string `json:"protocol_name"`
 	SetSliceDAX    bool   `json:"set_slice_dax"`
 	LogTraffic     bool   `json:"log_traffic"`
+	TXGainDB       int    `json:"tx_gain_db"`
 }
 
 func (a *App) SetOptions(o Options) error {
@@ -206,12 +210,16 @@ func (a *App) SetOptions(o Options) error {
 	if o.ProtocolName == "" || strings.ContainsAny(o.ProtocolName, ":,;") {
 		return fmt.Errorf("protocol name must be non-empty and not contain : , ;")
 	}
+	if o.TXGainDB < -40 || o.TXGainDB > 20 {
+		return fmt.Errorf("TX gain must be -40 to +20 dB")
+	}
 	a.cfg.Update(func(c *config.Config) {
 		c.UnkeyTimeoutMs, c.ProtocolName, c.SetSliceDAX, c.LogTraffic = o.UnkeyTimeoutMs, o.ProtocolName, o.SetSliceDAX, o.LogTraffic
+		c.TXGainDB = o.TXGainDB
 	})
 	a.log.SetTraffic(o.LogTraffic)
-	a.log.Log(logx.Info, "app", "options: unkey timeout %d ms, protocol name %q, auto DAX %v, traffic log %v",
-		o.UnkeyTimeoutMs, o.ProtocolName, o.SetSliceDAX, o.LogTraffic)
+	a.log.Log(logx.Info, "app", "options: unkey timeout %d ms, protocol name %q, auto DAX %v, traffic log %v, TX gain %d dB",
+		o.UnkeyTimeoutMs, o.ProtocolName, o.SetSliceDAX, o.LogTraffic, o.TXGainDB)
 	a.pushStatus()
 	return nil
 }

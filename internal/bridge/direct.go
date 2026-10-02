@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,7 +21,7 @@ type directRX struct {
 	wg   sync.WaitGroup
 }
 
-func startDirectRX(r *flex.Radio, lg *logx.Source, dax int, onData func([]float32)) *directRX {
+func startDirectRX(r *flex.Radio, lg *logx.Source, dax int, gain func() float32, onData func([]float32)) *directRX {
 	d := &directRX{stop: make(chan struct{})}
 	var packets atomic.Uint64
 	// The handler runs on the radio's single UDP goroutine, so the
@@ -32,6 +33,11 @@ func startDirectRX(r *flex.Radio, lg *logx.Source, dax int, onData func([]float3
 			return
 		}
 		s := vita.Stereo(p)
+		if g := gain(); g != 1 {
+			for i := range s {
+				s[i] *= g
+			}
+		}
 		if rate != audio.Rate {
 			rs := resamplers[rate]
 			if rs == nil {
@@ -102,17 +108,21 @@ func (d *directRX) Stop() {
 // directTX owns one dax_tx stream per radio session and paces TX audio to
 // the radio in 128-frame VITA-49 packets at the TX slice's sample rate.
 type directTX struct {
-	r  *flex.Radio
-	lg *logx.Source
+	r    *flex.Radio
+	lg   *logx.Source
+	gain func() float32 // linear TX gain, read at each key
 
 	mu    sync.Mutex
 	id    uint32
 	epoch uint64
 }
 
-func newDirectTX(r *flex.Radio, lg *logx.Source) *directTX {
-	return &directTX{r: r, lg: lg}
+func newDirectTX(r *flex.Radio, lg *logx.Source, gain func() float32) *directTX {
+	return &directTX{r: r, lg: lg, gain: gain}
 }
+
+// dbToGain converts decibels to a linear amplitude factor.
+func dbToGain(db float64) float32 { return float32(math.Pow(10, db/20)) }
 
 // ensure returns a live dax_tx stream id, creating one if needed.
 func (d *directTX) ensure() (uint32, error) {
@@ -150,18 +160,27 @@ func (s *directTXSession) Stop() {
 	s.wg.Wait()
 }
 
+// prepare creates the dax_tx stream ahead of the first key so keying does
+// not wait on the radio. Safe to call repeatedly.
+func (d *directTX) prepare() {
+	if _, err := d.ensure(); err != nil {
+		d.lg.Warn("cannot open DAX TX stream yet: %v", err)
+	}
+}
+
 // start begins sending audio pulled from pull (stereo, 48 kHz) until Stop.
+// It never blocks: stream setup happens on the session goroutine.
 func (d *directTX) start(pull func([]float32)) stopper {
 	s := &directTXSession{stop: make(chan struct{})}
-	id, err := d.ensure()
-	if err != nil {
-		d.lg.Error("cannot open DAX TX stream on the radio: %v", err)
-	} else if !d.r.StreamOwnsTX(id) {
-		d.r.Command(fmt.Sprintf("stream set 0x%08X tx=1", id), nil)
-	}
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
+		id, err := d.ensure()
+		if err != nil {
+			d.lg.Error("cannot open DAX TX stream on the radio: %v", err)
+		} else if !d.r.StreamOwnsTX(id) {
+			d.r.Command(fmt.Sprintf("stream set 0x%08X tx=1", id), nil)
+		}
 		t := time.NewTicker(5 * time.Millisecond)
 		defer t.Stop()
 		var (
@@ -175,6 +194,7 @@ func (d *directTX) start(pull func([]float32)) stopper {
 			warned  bool
 		)
 		began := time.Now()
+		gain := d.gain()
 		for {
 			select {
 			case <-s.stop:
@@ -208,6 +228,11 @@ func (d *directTX) start(pull func([]float32)) stopper {
 				}
 				pkt := pending[:vita.TXFrames*2]
 				pending = append([]float32(nil), pending[vita.TXFrames*2:]...)
+				if gain != 1 {
+					for i := range pkt {
+						pkt[i] *= gain
+					}
+				}
 				sent += vita.TXFrames
 				due -= vita.TXFrames
 				if !d.r.StreamOwnsTX(id) {
