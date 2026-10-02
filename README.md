@@ -91,4 +91,4 @@ internal/logx, config    logging and persisted settings
 * Split (VFO B to TX frequency), spots, CW macros, meters/sensors, IQ, and SmartLink are deferred, as are other phase 2/3 items in the requirements draft.
 * The TX gain trim is a simple software gain. The level that gives full rated power (OI-15) still has to be measured.
 * `PROTOCOL` reports `ExpertSDR3,2.0` by default for client compatibility (OI-23). You can change it in the UI.
-* WSJT-X 3.0 receive has been checked on a FLEX-6600M. Transmit, JTDX, MSHV and Log4OM are still to be tested. Use the traffic log to capture sessions.
+* Tested on a FLEX-6600M: WSJT-X 3.0 and JTDX, each on its own port and slice, with JTDX set as TCI Client RX2. MSHV and Log4OM are still to be tested. Use the traffic log to capture sessions.
