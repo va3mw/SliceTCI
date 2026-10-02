@@ -161,7 +161,8 @@ input[type=number] { width: 72px; }
     </div>
     <div class="group">
       <b>Behaviour</b>
-      <div class="field"><label for="unkeyMs">Safety unkey (ms)</label><input id="unkeyMs" type="number" min="500" max="10000" step="100"></div>
+      <div class="field"><label for="unkeyMs" title="Unkey if the transmitting client stops sending TCI audio for this long">Safety unkey (ms)</label><input id="unkeyMs" type="number" min="500" max="10000" step="100"></div>
+      <div class="field"><label for="maxTx" title="TX watchdog: the longest single transmission FlexTCI allows">Max TX time (s)</label><input id="maxTx" type="number" min="5" max="3600" step="5"></div>
       <div class="field"><label for="protoName">Protocol name</label><input id="protoName" type="text"></div>
       <label><input id="autoDax" type="checkbox"> Set the slice's DAX channel when a client connects</label>
       <label><input id="logTraffic" type="checkbox"> Capture TCI/API traffic in the log</label>
@@ -340,6 +341,7 @@ function renderSettings(s, force) {
   }
   if (force) {
     $("unkeyMs").value = c.unkey_timeout_ms; $("protoName").value = c.protocol_name;
+    $("maxTx").value = c.max_tx_seconds;
     $("autoDax").checked = c.set_slice_dax; $("logTraffic").checked = c.log_traffic;
     $("txGain").value = c.tx_gain_db; $("txGainVal").textContent = c.tx_gain_db + " dB";
   }
@@ -361,7 +363,7 @@ $("txGain").onchange = () => call("SetTXGain", +$("txGain").value);
 $("setSave").onclick = async () => {
   try {
     await call("SetOptions", {
-      unkey_timeout_ms: +$("unkeyMs").value, protocol_name: $("protoName").value,
+      unkey_timeout_ms: +$("unkeyMs").value, protocol_name: $("protoName").value, max_tx_seconds: +$("maxTx").value,
       set_slice_dax: $("autoDax").checked, log_traffic: $("logTraffic").checked, tx_gain_db: +$("txGain").value,
     });
   } catch { return; }

@@ -61,6 +61,34 @@ func Fmt(name string, args ...any) string {
 	return b.String()
 }
 
+// indexed lists commands whose first argument is the transceiver index.
+var indexed = map[string]bool{
+	"vfo": true, "dds": true, "if": true, "modulation": true, "rx_filter_band": true,
+	"tx_enable": true, "trx": true, "tune": true, "drive": true, "tune_drive": true,
+	"split_enable": true, "rit_enable": true, "rit_offset": true, "xit_enable": true,
+	"xit_offset": true, "rx_enable": true, "audio_start": true, "audio_stop": true,
+	"rx_channel_enable": true, "tx_frequency": true,
+}
+
+// IsIndexed reports whether cmd's first argument is a transceiver index.
+func IsIndexed(cmd string) bool { return indexed[strings.ToLower(cmd)] }
+
+// Reindex rewrites a transceiver-0 line ("vfo:0,0,7074000;") for index idx.
+// Lines for other indices and non-indexed commands are returned unchanged.
+func Reindex(line string, idx int) string {
+	if idx == 0 {
+		return line
+	}
+	name, rest, ok := strings.Cut(line, ":")
+	if !ok || !indexed[name] {
+		return line
+	}
+	if strings.HasPrefix(rest, "0,") || rest == "0;" {
+		return name + ":" + strconv.Itoa(idx) + rest[1:]
+	}
+	return line
+}
+
 func ParseBool(s string) (bool, bool) {
 	switch strings.ToLower(s) {
 	case "true", "1":

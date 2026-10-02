@@ -14,7 +14,7 @@ Log4OM ──ws://127.0.0.1:50001──┘   per slice)         └── UDP  �
 
 **Audio** comes straight from the radio. FlexTCI registers a UDP port with `client udpport` and opens a `dax_rx` stream for each channel's DAX channel. It opens a `dax_tx` stream for transmit, taking DAX TX ownership with `stream set … tx=1`. RX arrives as float32 stereo at the slice's `sample_rate` (24 kHz on a 6600M) and is resampled to whatever the TCI client asked for. TX goes out in 128-frame packets paced to the TX slice's rate. The streams are recreated after a reconnect. Windows Firewall must allow FlexTCI to receive UDP. Each channel has an RX gain (default −40 dB, which puts WSJT-X near 30 dB), and there is one TX gain.
 
-* **One TCI port per slice.** Each channel is a port, a slice letter, a DAX channel and an RX gain. The defaults are Slice A → port 50001 → DAX 1, Slice B → 50002 → DAX 2, and so on. Every client sees a single transceiver (`trx 0`), so each WSJT-X instance uses **TCI Client RX1** on its own port.
+* **One TCI port per slice.** Each channel is a port, a slice letter, a DAX channel and an RX gain. The defaults are Slice A → port 50001 → DAX 1, Slice B → 50002 → DAX 2, and so on. Each WSJT-X or JTDX instance uses **TCI Client RX1** on its own port. A client set to RX2 also works: every receiver index on a port maps to that port's slice.
 * You can run 1 to 8 channels (the default is 1). Several clients can share a port (for example WSJT-X and a logger on the same slice), and they are kept in sync.
 * SmartSDR (or another GUI station) must be running, because it owns the slices. SmartSDR DAX is not needed. FlexTCI binds to the station you pick, so in multiFLEX "Slice A" means *that station's* Slice A.
 * When a client connects, the slice's DAX channel is set to match its assignment. You can turn this off with **Set slice DAX channel**.
@@ -52,7 +52,7 @@ The log window filters by level (Traffic, Debug, Info, Warnings, Errors) and by 
 
 | Area | Commands |
 |---|---|
-| Init burst | `protocol`, `device`, `receive_only`, `trx_count:1`, `channel_count:2`, `vfo_limits`, `if_limits`, `modulations_list`, full state, `start`, `ready` |
+| Init burst | `protocol`, `device`, `receive_only`, `trx_count:2` (both indices map to the port's slice, so RX1 and RX2 client settings work), `channel_count:2`, `vfo_limits`, `if_limits`, `modulations_list`, full state, `start`, `ready` |
 | Tuning | `vfo` (A sets; B echoes A), `dds`/`if` (read-only), `modulation`, `rx_filter_band`, `rit_*`, `xit_*` |
 | TX | `trx` (incl. `tci` source), `tune`, `drive`, `tune_drive`, `tx_enable` |
 | Audio | `audio_start/stop`, `audio_samplerate` 8/12/24/48 kHz, `audio_stream_sample_type`, `audio_stream_channels`, `audio_stream_samples`, `tx_stream_audio_buffering`, TX_CHRONO pull model |

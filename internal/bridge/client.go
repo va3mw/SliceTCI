@@ -32,6 +32,10 @@ type client struct {
 	reason    atomic.Value // string
 
 	audioOn atomic.Bool
+	// trx is the transceiver index the client addresses. Every port has
+	// one slice, but a client set up as "RX2" talks to index 1; it gets
+	// the same slice under that index.
+	trx atomic.Int32
 
 	mu         sync.Mutex
 	rate       int
@@ -132,9 +136,12 @@ func (c *client) closeReason() string {
 	return "unknown"
 }
 
-// sendText queues text commands, one per WebSocket frame.
+// sendText queues text commands, one per WebSocket frame. Lines are built
+// for transceiver 0 and rewritten to the index this client uses.
 func (c *client) sendText(lines ...string) {
+	idx := int(c.trx.Load())
 	for _, l := range lines {
+		l = tci.Reindex(l, idx)
 		select {
 		case <-c.done:
 			return
@@ -185,7 +192,7 @@ func (c *client) pushRX(s []float32) {
 	}
 	c.rxAcc = append(c.rxAcc, x...)
 	n := c.samples - c.samples%c.chans
-	h := tci.Header{SampleRate: uint32(c.rate), Format: c.format, Type: tci.StreamRXAudio, Channels: uint32(c.chans)}
+	h := tci.Header{Receiver: uint32(c.trx.Load()), SampleRate: uint32(c.rate), Format: c.format, Type: tci.StreamRXAudio, Channels: uint32(c.chans)}
 	var frames [][]byte
 	for len(c.rxAcc) >= n {
 		frames = append(frames, tci.Encode(h, c.rxAcc[:n]))
@@ -243,6 +250,11 @@ func (c *client) toStereo48k(h tci.Header, s []float32) []float32 {
 	return c.txRs.Process(s)
 }
 
+// maxTRX is the number of transceiver indices advertised (TRX_COUNT). Each
+// port serves one slice under every index, so a client configured as RX1 or
+// RX2 works on any port.
+const maxTRX = 2
+
 func validRate(r int) bool { return r == 8000 || r == 12000 || r == 24000 || r == 48000 }
 
 // chronoFrame is the TX_CHRONO request for one block in the client's format.
@@ -250,7 +262,7 @@ func (c *client) chronoFrame() (frame []byte, frames48k int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	n := c.samples - c.samples%c.chans
-	h := tci.Header{SampleRate: uint32(c.rate), Format: c.format, Type: tci.StreamTXChrono, Channels: uint32(c.chans)}
+	h := tci.Header{Receiver: uint32(c.trx.Load()), SampleRate: uint32(c.rate), Format: c.format, Type: tci.StreamTXChrono, Channels: uint32(c.chans)}
 	frames48k = n / c.chans * audio.Rate / c.rate
 	return tci.Encode(h, make([]float32, n)), frames48k
 }
@@ -291,7 +303,20 @@ func (c *client) dispatch(cmd tci.Command) {
 		}
 		return idx
 	}
+	// Learn which transceiver index the client uses (RX1 = 0, RX2 = 1, ...).
+	if tci.IsIndexed(cmd.Name) && len(a) >= 1 {
+		if n, ok := atoi(a[0]); ok && n >= 0 && n < maxTRX {
+			if old := c.trx.Swap(int32(n)); old != int32(n) {
+				ch.lg.Info("#%d uses TCI receiver %d (RX%d); it is served Slice %s", c.id, n, n+1, ch.cfg.Slice)
+			}
+		}
+	}
 	switch cmd.Name {
+	case "rx_enable":
+		// TCI 1.x command still sent by JTDX and others; receivers are always on.
+		if len(a) >= 1 {
+			c.sendText(tci.Fmt("rx_enable", 0, true))
+		}
 	case "vfo":
 		if len(a) < 2 {
 			return

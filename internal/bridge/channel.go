@@ -385,7 +385,7 @@ func (ch *Channel) initLines() []string {
 		tci.Fmt("protocol", cfg.ProtocolName, "2.0"),
 		tci.Fmt("device", device),
 		tci.Fmt("receive_only", false),
-		tci.Fmt("trx_count", 1),
+		tci.Fmt("trx_count", maxTRX),
 		tci.Fmt("channel_count", 2),
 		tci.Fmt("vfo_limits", 10000, 54000000),
 		tci.Fmt("if_limits", -24000, 24000),
@@ -398,7 +398,14 @@ func (ch *Channel) initLines() []string {
 	ch.mu.Lock()
 	cur := ch.last
 	ch.mu.Unlock()
-	lines = append(lines, diff(cur, cur, true)...)
+	// The same slice is reported under every receiver index, so a client
+	// set up as RX1 or RX2 finds its state before READY.
+	state := append([]string{tci.Fmt("rx_enable", 0, true)}, diff(cur, cur, true)...)
+	for i := 0; i < maxTRX; i++ {
+		for _, l := range state {
+			lines = append(lines, tci.Reindex(l, i))
+		}
+	}
 	lines = append(lines, "start;", "ready;")
 	return lines
 }

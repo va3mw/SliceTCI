@@ -430,10 +430,24 @@ func (b *Bridge) txLoop() {
 			return
 		case <-t.C:
 		}
-		timeout := time.Duration(b.cfg.Get().UnkeyTimeoutMs) * time.Millisecond
+		cfg := b.cfg.Get()
+		timeout := time.Duration(cfg.UnkeyTimeoutMs) * time.Millisecond
+		maxTX := time.Duration(cfg.MaxTXSeconds) * time.Second
 		b.mu.Lock()
 		o := b.tx
-		if o == nil || !o.tciAudio {
+		if o == nil {
+			b.mu.Unlock()
+			continue
+		}
+		// TX watchdog: applies to every kind of TCI keying (TCI audio,
+		// radio audio, TUNE), however healthy the client looks.
+		if keyed := time.Since(o.since); keyed > maxTX {
+			b.mu.Unlock()
+			b.lg.Warn("SAFETY: client #%d has transmitted for %s, over the %d s limit", o.c.id, keyed.Round(time.Second), cfg.MaxTXSeconds)
+			b.releaseTX(o.c, "TX time limit reached (watchdog)")
+			continue
+		}
+		if !o.tciAudio {
 			b.mu.Unlock()
 			continue
 		}

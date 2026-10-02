@@ -2,6 +2,7 @@ package tci
 
 import (
 	"math"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -42,6 +43,24 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 			if math.Abs(float64(out[i]-in[i])) > 1e-3 {
 				t.Errorf("%s sample %d: %v != %v", FormatName(f), i, out[i], in[i])
 			}
+		}
+	}
+}
+
+func TestReindex(t *testing.T) {
+	cases := [][3]string{
+		{"vfo:0,0,7074000;", "1", "vfo:1,0,7074000;"},
+		{"trx:0,true;", "1", "trx:1,true;"},
+		{"audio_start:0;", "1", "audio_start:1;"},
+		{"vfo:1,0,7074000;", "1", "vfo:1,0,7074000;"}, // already another index
+		{"trx_count:2;", "1", "trx_count:2;"},         // not indexed
+		{"audio_samplerate:48000;", "1", "audio_samplerate:48000;"},
+		{"vfo:0,0,7074000;", "0", "vfo:0,0,7074000;"},
+	}
+	for _, c := range cases {
+		idx, _ := strconv.Atoi(c[1])
+		if got := Reindex(c[0], idx); got != c[2] {
+			t.Errorf("Reindex(%q,%d) = %q, want %q", c[0], idx, got, c[2])
 		}
 	}
 }

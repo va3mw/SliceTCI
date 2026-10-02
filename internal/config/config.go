@@ -18,6 +18,10 @@ type Channel struct {
 	RXGainDB *int   `json:"rx_gain_db,omitempty"` // nil = default
 }
 
+// DefaultMaxTXSeconds is the TX watchdog default. FT8/FT4 overs are well
+// under a minute; five minutes still allows long RTTY/SSB overs.
+const DefaultMaxTXSeconds = 300
+
 // DefaultRXGainDB brings the radio's full-scale DAX stream down to the level
 // digital-mode apps expect (WSJT-X wants roughly 30 dB on its meter; the raw
 // stream reads about 76 dB).
@@ -45,6 +49,7 @@ type Config struct {
 	Channels       []Channel `json:"channels"`
 	TXGainDB       int       `json:"tx_gain_db"` // TX audio trim
 	UnkeyTimeoutMs int       `json:"unkey_timeout_ms"`
+	MaxTXSeconds   int       `json:"max_tx_seconds"` // TX watchdog: longest single transmission
 	ProtocolName   string    `json:"protocol_name"`
 	SetSliceDAX    bool      `json:"set_slice_dax"`
 	LogTraffic     bool      `json:"log_traffic"`
@@ -80,6 +85,9 @@ func (c *Config) normalize() {
 	}
 	if c.UnkeyTimeoutMs < 500 {
 		c.UnkeyTimeoutMs = 2000
+	}
+	if c.MaxTXSeconds < 5 || c.MaxTXSeconds > 3600 {
+		c.MaxTXSeconds = DefaultMaxTXSeconds
 	}
 	if c.ProtocolName == "" {
 		c.ProtocolName = "ExpertSDR3"

@@ -205,6 +205,7 @@ type Options struct {
 	SetSliceDAX    bool   `json:"set_slice_dax"`
 	LogTraffic     bool   `json:"log_traffic"`
 	TXGainDB       int    `json:"tx_gain_db"`
+	MaxTXSeconds   int    `json:"max_tx_seconds"`
 }
 
 func (a *App) SetOptions(o Options) error {
@@ -218,13 +219,16 @@ func (a *App) SetOptions(o Options) error {
 	if o.TXGainDB < -40 || o.TXGainDB > 20 {
 		return fmt.Errorf("TX gain must be -40 to +20 dB")
 	}
+	if o.MaxTXSeconds < 5 || o.MaxTXSeconds > 3600 {
+		return fmt.Errorf("max TX time must be 5-3600 s")
+	}
 	a.cfg.Update(func(c *config.Config) {
 		c.UnkeyTimeoutMs, c.ProtocolName, c.SetSliceDAX, c.LogTraffic = o.UnkeyTimeoutMs, o.ProtocolName, o.SetSliceDAX, o.LogTraffic
-		c.TXGainDB = o.TXGainDB
+		c.TXGainDB, c.MaxTXSeconds = o.TXGainDB, o.MaxTXSeconds
 	})
 	a.log.SetTraffic(o.LogTraffic)
-	a.log.Log(logx.Info, "app", "options: unkey timeout %d ms, protocol name %q, auto DAX %v, traffic log %v, TX gain %d dB",
-		o.UnkeyTimeoutMs, o.ProtocolName, o.SetSliceDAX, o.LogTraffic, o.TXGainDB)
+	a.log.Log(logx.Info, "app", "options: unkey timeout %d ms, max TX %d s, protocol name %q, auto DAX %v, traffic log %v, TX gain %d dB",
+		o.UnkeyTimeoutMs, o.MaxTXSeconds, o.ProtocolName, o.SetSliceDAX, o.LogTraffic, o.TXGainDB)
 	a.pushStatus()
 	return nil
 }

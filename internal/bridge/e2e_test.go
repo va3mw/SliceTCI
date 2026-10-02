@@ -316,7 +316,8 @@ func TestEndToEnd(t *testing.T) {
 	}
 	all := strings.Join(got, "")
 	for _, want := range []string{
-		"protocol:ExpertSDR3,2.0;", "device:FLEX-6600M;", "trx_count:1;", "vfo:0,0,14074000;",
+		"protocol:ExpertSDR3,2.0;", "device:FLEX-6600M;", "trx_count:2;", "vfo:0,0,14074000;",
+		"vfo:1,0,14074000;", "rx_enable:1,true;", "modulation:1,digu;",
 		"modulation:0,digu;", "tx_enable:0,true;", "trx:0,false;",
 		"modulations_list:lsb,usb,am,cw,digl,digu,sam,nfm,dfm,rtty;",
 	} {
@@ -330,6 +331,18 @@ func TestEndToEnd(t *testing.T) {
 			t.Errorf("sent rejected command %q", bad)
 		}
 	}
+
+	// A client set up as "TCI Client RX2" (JTDX) addresses receiver 1 and
+	// must be served this port's slice under that index.
+	rx2 := dialTCI(t, "127.0.0.1", tciPort)
+	rx2.expect(t, "ready;", 3*time.Second)
+	rx2.send("RX_ENABLE:1,true;")
+	rx2.expect(t, "rx_enable:1,true;", time.Second)
+	rx2.send("VFO:1,0;")
+	rx2.expect(t, "vfo:1,0,14074000;", time.Second)
+	rx2.send("MODULATION:1;")
+	rx2.expect(t, "modulation:1,digu;", time.Second)
+	rx2.conn.Close()
 
 	// A web page (Origin header) must be refused.
 	hdr := http.Header{"Origin": []string{"https://evil.example"}}
@@ -560,4 +573,40 @@ loop:
 	}
 	c.send("TRX:0,false;")
 	radio.expect(t, "xmit 0", time.Second)
+}
+
+// TestTXWatchdog: a client that keys and never unkeys (while staying
+// connected) is cut off at the max TX time.
+func TestTXWatchdog(t *testing.T) {
+	dir := t.TempDir()
+	radio := newFakeRadio(t)
+	flex.APIPort = radio.port()
+	const tciPort = 50953
+	cfg := config.LoadFrom(filepath.Join(dir, "config.json"))
+	cfg.Update(func(c *config.Config) {
+		c.Channels[0].Port = tciPort
+		c.AutoConnect = false
+		c.MaxTXSeconds = 5
+	})
+	l := logx.New(dir)
+	defer l.Close()
+	l.OnEntry(func(e logx.Entry) { t.Logf("%s %-5s %-9s %s", e.Time, e.Level, e.Source, e.Msg) })
+	b := New(l, cfg, nil)
+	b.Start()
+	defer b.Shutdown()
+	if err := b.Connect("", "127.0.0.1"); err != nil {
+		t.Fatal(err)
+	}
+	radio.expect(t, "client bind client_id=AAAA-BBBB", 3*time.Second)
+	c := dialTCI(t, "127.0.0.1", tciPort)
+	c.expect(t, "ready;", 3*time.Second)
+
+	c.send("TRX:0,true;") // radio audio: no TCI audio timeout applies
+	radio.expect(t, "xmit 1", time.Second)
+	start := time.Now()
+	radio.expect(t, "xmit 0", 8*time.Second)
+	if d := time.Since(start); d < 4500*time.Millisecond {
+		t.Errorf("watchdog fired after %v, before the 5 s limit", d)
+	}
+	c.expect(t, "trx:0,false;", time.Second)
 }
