@@ -11,7 +11,7 @@
   },
   "info": {
     "productName": "FlexTCI",
-    "productVersion": "0.4.3",
+    "productVersion": "0.4.4",
     "comments": "TCI server bridge for FlexRadio"
   }
 }

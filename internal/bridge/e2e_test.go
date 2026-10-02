@@ -465,6 +465,7 @@ func TestDirectAudio(t *testing.T) {
 		c.Channels[0].Port = tciPort
 		zero := 0
 		c.Channels[0].RXGainDB = &zero
+		c.TXGainDB = 0 // the TX check below expects the client's level unchanged
 		c.AutoConnect = false
 	})
 	l := logx.New(dir)

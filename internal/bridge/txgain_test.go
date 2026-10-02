@@ -20,12 +20,13 @@ func TestTXGainApplied(t *testing.T) {
 		b.pullTX(out)
 		return out[0]
 	}
+	// A fresh config defaults to -6 dB.
+	if v := block(); math.Abs(float64(v)-0.2506) > 0.001 {
+		t.Fatalf("default -6 dB: got %v, want ~0.25", v)
+	}
+	cfg.Update(func(c *config.Config) { c.TXGainDB = 0 })
 	if v := block(); v != 0.5 {
 		t.Fatalf("0 dB: got %v", v)
-	}
-	cfg.Update(func(c *config.Config) { c.TXGainDB = -6 })
-	if v := block(); math.Abs(float64(v)-0.2506) > 0.001 {
-		t.Fatalf("-6 dB: got %v, want ~0.25", v)
 	}
 	if peak := math.Float32frombits(b.txPeak.Load()); peak < 0.49 {
 		t.Errorf("TX meter peak %v not recorded", peak)

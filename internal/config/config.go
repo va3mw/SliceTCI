@@ -18,6 +18,9 @@ type Channel struct {
 	RXGainDB *int   `json:"rx_gain_db,omitempty"` // nil = default
 }
 
+// DefaultTXGainDB trims TCI transmit audio, which runs hot at 0 dB.
+const DefaultTXGainDB = -6
+
 // DefaultMaxTXSeconds is the TX watchdog default. FT8/FT4 overs are well
 // under a minute; five minutes still allows long RTTY/SSB overs.
 const DefaultMaxTXSeconds = 300
@@ -59,6 +62,7 @@ type Config struct {
 func Default() *Config {
 	c := &Config{
 		ChannelCount:   1,
+		TXGainDB:       DefaultTXGainDB,
 		UnkeyTimeoutMs: 2000,
 		ProtocolName:   "ExpertSDR3",
 		SetSliceDAX:    true,
