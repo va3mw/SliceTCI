@@ -33,7 +33,7 @@ Log4OM ──ws://127.0.0.1:50001──┘   per slice)         └── UDP  �
 * `TX_ENABLE` follows the radio's interlock `tx_allowed` and `transmit inhibit`. Keying is refused while it is false.
 * `TRX` reports true only while the bound station's transmitter is keyed (interlock `tx_client_handle`), so another multiFLEX station transmitting does not show up as this client's TX.
 * Any TCI client may unkey TCI transmit. Transmit started in SmartSDR (MOX, mic PTT) is never unkeyed by a client's `TRX:false`.
-* If the slice is in a non-digital mode while TCI audio transmits, the TX audio source is switched to DAX for the duration and then restored.
+* When a client transmits its own (TCI) audio, a slice left in **USB/LSB is switched to DIGU/DIGL**, and **TX DAX is turned on** if it was off. Without DAX the client's audio never reaches the transmitter. Both changes happen before keying, are logged as warnings, and are left in place. You can turn this off in Settings. FlexTCI then only switches DAX on for the duration of the transmission.
 
 ## Security
 

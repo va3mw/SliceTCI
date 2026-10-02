@@ -179,6 +179,8 @@ func (f *fakeRadio) serve() {
 			send("S0|interlock tx_client_handle=0x00000000 state=READY reason= source= tx_allowed=1 amplifier=")
 		case strings.HasPrefix(cmd, "slice tune 0 "):
 			slice("RF_frequency=" + strings.TrimPrefix(cmd, "slice tune 0 "))
+		case strings.HasPrefix(cmd, "transmit set "):
+			send("S0000ABCD|transmit " + strings.TrimPrefix(cmd, "transmit set "))
 		case strings.HasPrefix(cmd, "slice set 0 "):
 			slice(strings.TrimPrefix(cmd, "slice set 0 "))
 		}
@@ -403,9 +405,13 @@ func TestEndToEnd(t *testing.T) {
 	radio.expect(t, "xmit 0", time.Second)
 
 	// TCI audio keying without audio replies: safety unkey after the timeout.
+	// The slice was left in USB with TX DAX off: before keying, FlexTCI
+	// must switch to DIGU and turn TX DAX on (and leave both that way).
 	c.send("TRX:0,true,tci;")
-	radio.expect(t, "transmit set dax=1", time.Second) // USB mode, so DAX source is switched
+	radio.expect(t, "slice set 0 mode=DIGU", time.Second)
+	radio.expect(t, "transmit set dax=1", time.Second)
 	radio.expect(t, "xmit 1", time.Second)
+	c.expect(t, "modulation:0,digu;", time.Second)
 	select {
 	case h := <-c.chrono:
 		if h.Length != 2048 || h.SampleRate != 48000 || h.Channels != 2 {
@@ -419,7 +425,10 @@ func TestEndToEnd(t *testing.T) {
 	if d := time.Since(start); d < 400*time.Millisecond {
 		t.Errorf("safety unkey too early (%v)", d)
 	}
-	radio.expect(t, "transmit set dax=0", time.Second)
+	time.Sleep(200 * time.Millisecond)
+	if radio.sent("transmit set dax=0") {
+		t.Error("TX DAX was turned back off after unkey")
+	}
 
 	// TCI audio keying with audio answers stays keyed, then a dropped
 	// connection unkeys.

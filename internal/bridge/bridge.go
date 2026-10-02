@@ -225,6 +225,18 @@ func (b *Bridge) resyncOnError(ch *Channel) func(uint32, string) {
 
 // ---- transmit ----
 
+// digitalFor returns the data mode matching a voice sideband mode, or "" if
+// the mode should be left alone (already digital, CW, AM, FM, ...).
+func digitalFor(mode string) string {
+	switch strings.ToUpper(mode) {
+	case "USB":
+		return "DIGU"
+	case "LSB":
+		return "DIGL"
+	}
+	return ""
+}
+
 func isDigital(mode string) bool {
 	m := strings.ToUpper(mode)
 	return m == "DIGU" || m == "DIGL" || m == "RTTY"
@@ -266,14 +278,21 @@ func (b *Bridge) requestTX(c *client, tciAudio, tune bool) error {
 	}
 	o.tciAudio, o.tune = tciAudio, tune
 	o.lastAudio, o.outstanding = now, 0
-	var setDAX, openRender bool
+	var setDAX, tempDAX, openRender bool
+	var digitalMode string
 	if tciAudio {
 		if b.render == nil {
 			b.fifo.Reset()
 			openRender = true
 		}
-		if !isDigital(sl.Mode) && !snap.TX.DAX && !o.restoreDAX {
-			o.restoreDAX, setDAX = true, true
+		if b.cfg.Get().DigitalOnTX {
+			// The client is sending its own audio, so this is a data
+			// transmission: make sure the radio is set up for it, and
+			// leave it that way so the operator can see what changed.
+			digitalMode = digitalFor(sl.Mode)
+			setDAX = !snap.TX.DAX
+		} else if !isDigital(sl.Mode) && !snap.TX.DAX && !o.restoreDAX {
+			o.restoreDAX, setDAX, tempDAX = true, true, true // undone on unkey
 		}
 	}
 	b.mu.Unlock()
@@ -296,8 +315,16 @@ func (b *Bridge) requestTX(c *client, tciAudio, tune bool) error {
 		b.lg.Info("making Slice %s the TX slice", sl.Letter)
 		b.radio.SetSlice(sl.Index, "tx=1")
 	}
+	if digitalMode != "" {
+		b.lg.Warn("Slice %s was in %s while client #%d transmits TCI audio: switching it to %s", sl.Letter, sl.Mode, c.id, digitalMode)
+		b.radio.SetMode(sl.Index, digitalMode)
+	}
 	if setDAX {
-		b.lg.Info("Slice %s is in %s: switching TX audio source to DAX while TCI transmits", sl.Letter, sl.Mode)
+		if tempDAX {
+			b.lg.Info("Slice %s is in %s: switching TX audio source to DAX while TCI transmits", sl.Letter, sl.Mode)
+		} else {
+			b.lg.Warn("TX DAX was off: turning it on so client #%d's TCI audio reaches the transmitter", c.id)
+		}
 		b.radio.SetTransmit("dax=1")
 	}
 	src := "radio audio (mic)"

@@ -55,6 +55,7 @@ type Config struct {
 	MaxTXSeconds   int       `json:"max_tx_seconds"` // TX watchdog: longest single transmission
 	ProtocolName   string    `json:"protocol_name"`
 	SetSliceDAX    bool      `json:"set_slice_dax"`
+	DigitalOnTX    bool      `json:"digital_on_tx"` // TCI-audio TX: USB/LSB -> DIGU/DIGL and TX DAX on
 	LogTraffic     bool      `json:"log_traffic"`
 	AutoConnect    bool      `json:"auto_connect"`
 }
@@ -66,6 +67,7 @@ func Default() *Config {
 		UnkeyTimeoutMs: 2000,
 		ProtocolName:   "ExpertSDR3",
 		SetSliceDAX:    true,
+		DigitalOnTX:    true,
 		AutoConnect:    true,
 	}
 	c.normalize()

@@ -171,6 +171,7 @@ input[type=number] { width: 72px; }
       <div class="field"><label for="maxTx" title="TX watchdog: the longest single transmission FlexTCI allows">Max TX time (s)</label><input id="maxTx" type="number" min="5" max="3600" step="5"></div>
       <div class="field"><label for="protoName">Protocol name</label><input id="protoName" type="text"></div>
       <label><input id="autoDax" type="checkbox"> Set the slice's DAX channel when a client connects</label>
+      <label title="When a client transmits its own (TCI) audio: USB becomes DIGU, LSB becomes DIGL, and TX DAX is turned on if it was off. Both changes are logged and left in place."><input id="digitalTx" type="checkbox"> On TCI-audio transmit, switch USB/LSB to DIGU/DIGL and turn on TX DAX</label>
       <label><input id="logTraffic" type="checkbox"> Capture TCI/API traffic in the log</label>
     </div>
     <div class="hint" id="aboutLine"></div>
@@ -350,6 +351,7 @@ function renderSettings(s, force) {
     $("unkeyMs").value = c.unkey_timeout_ms; $("protoName").value = c.protocol_name;
     $("maxTx").value = c.max_tx_seconds;
     $("autoDax").checked = c.set_slice_dax; $("logTraffic").checked = c.log_traffic;
+    $("digitalTx").checked = c.digital_on_tx;
   }
 }
 $("btnSettings").onclick = async () => {
@@ -396,7 +398,7 @@ $("setSave").onclick = async () => {
   try {
     await call("SetOptions", {
       unkey_timeout_ms: +$("unkeyMs").value, protocol_name: $("protoName").value, max_tx_seconds: +$("maxTx").value,
-      set_slice_dax: $("autoDax").checked, log_traffic: $("logTraffic").checked,
+      set_slice_dax: $("autoDax").checked, digital_on_tx: $("digitalTx").checked, log_traffic: $("logTraffic").checked,
     });
   } catch { return; }
   close("setDlg");

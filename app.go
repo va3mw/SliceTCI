@@ -207,6 +207,7 @@ type Options struct {
 	UnkeyTimeoutMs int    `json:"unkey_timeout_ms"`
 	ProtocolName   string `json:"protocol_name"`
 	SetSliceDAX    bool   `json:"set_slice_dax"`
+	DigitalOnTX    bool   `json:"digital_on_tx"`
 	LogTraffic     bool   `json:"log_traffic"`
 	MaxTXSeconds   int    `json:"max_tx_seconds"`
 }
@@ -224,11 +225,11 @@ func (a *App) SetOptions(o Options) error {
 	}
 	a.cfg.Update(func(c *config.Config) {
 		c.UnkeyTimeoutMs, c.ProtocolName, c.SetSliceDAX, c.LogTraffic = o.UnkeyTimeoutMs, o.ProtocolName, o.SetSliceDAX, o.LogTraffic
-		c.MaxTXSeconds = o.MaxTXSeconds
+		c.MaxTXSeconds, c.DigitalOnTX = o.MaxTXSeconds, o.DigitalOnTX
 	})
 	a.log.SetTraffic(o.LogTraffic)
-	a.log.Log(logx.Info, "app", "options: unkey timeout %d ms, max TX %d s, protocol name %q, auto DAX %v, traffic log %v",
-		o.UnkeyTimeoutMs, o.MaxTXSeconds, o.ProtocolName, o.SetSliceDAX, o.LogTraffic)
+	a.log.Log(logx.Info, "app", "options: unkey timeout %d ms, max TX %d s, protocol name %q, auto DAX %v, digital on TX %v, traffic log %v",
+		o.UnkeyTimeoutMs, o.MaxTXSeconds, o.ProtocolName, o.SetSliceDAX, o.DigitalOnTX, o.LogTraffic)
 	a.pushStatus()
 	return nil
 }
