@@ -21,9 +21,15 @@ Log4OM ──ws://127.0.0.1:50001──┘   per slice)         └── UDP  �
 
 ## WSJT-X setup
 
-1. Settings → Radio: Rig **TCI Client RX1**, Network server `127.0.0.1:50001` (the channel's port).
-2. PTT method **CAT**. Split operation **None** or **Fake It** (TCI split is not mapped yet).
-3. Settings → Audio: choose the **TCI audio** input and output.
+1. **Settings → Radio:** Rig **TCI Client RX1**, TCI Server `127.0.0.1:50001` (the channel's port). PTT method **CAT**. Mode **None** (FlexTCI switches USB/LSB to DIGU/DIGL itself when transmitting). Split operation **None** or **Fake It** (TCI split is not mapped yet).
+
+   ![WSJT-X Radio settings for FlexTCI](TCI-Rig.png)
+
+2. **Settings → Audio:** tick **Use TCI Audio (restart required)**, set Input and Output to **TCI audio**, then restart WSJT-X. Set the receive level with FlexTCI's **RX dB** for the channel (aim for about 30 dB on the WSJT-X meter) rather than WSJT-X's Rx gain.
+
+   ![WSJT-X Audio settings for FlexTCI](TCI-Audio.png)
+
+For more slices, run one WSJT-X instance per channel (`wsjtx --rig-name=SliceB`) and point each at its own port (50002, 50003, …).
 
 ## Transmit safety
 
