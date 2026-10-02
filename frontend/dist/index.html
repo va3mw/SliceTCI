@@ -34,6 +34,11 @@ input[type=number] { width: 72px; }
 .dot { width: 13px; height: 13px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #9a9a9a, #555); flex: none; }
 .dot.on { background: radial-gradient(circle at 35% 35%, #7fb2ff, #1d4fbf); }
 .dot.busy { background: radial-gradient(circle at 35% 35%, #ffd27a, #c88700); }
+.txstrip { background: var(--panel); border: 1px solid var(--line); padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; }
+.txhead { display: flex; justify-content: space-between; align-items: center; }
+.txhead b { font-weight: 600; }
+#txState.on { color: var(--red); font-weight: 600; }
+.dim { color: var(--dim); }
 .list { flex: 1; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); min-height: 120px; }
 .item { display: flex; gap: 10px; padding: 8px 8px; border-bottom: 1px solid var(--line2); position: relative; }
 .item.sel { background: var(--sel); }
@@ -109,6 +114,12 @@ input[type=number] { width: 72px; }
   <span class="dot" id="dot" title="Radio connection"></span>
 </div>
 
+<div class="txstrip" title="Level of TCI transmit audio sent to the radio. Lower it if the transmit audio is too hot (ALC, splatter). Applies immediately, even while transmitting.">
+  <div class="txhead"><b>TX Audio</b><span id="txState" class="dim">Idle</span></div>
+  <div class="slider"><span class="dim">Gain</span><input id="txGain" type="range" min="-40" max="20" step="1"><span id="txGainVal" style="width:46px;text-align:right"></span></div>
+  <div class="lvl"><div id="txLvl"></div></div>
+</div>
+
 <div class="list" id="list"></div>
 
 <div class="buttons">
@@ -153,11 +164,6 @@ input[type=number] { width: 72px; }
       <div class="slider"><input id="manualIp" type="text" placeholder="or IP address" style="flex:1">
         <button class="btn" id="btnConnect" style="flex:0 0 70px">Connect</button></div>
       <button class="btn light" id="btnDisconnect">Disconnect</button>
-    </div>
-    <div class="group">
-      <b>TX gain</b>
-      <div class="slider"><input id="txGain" type="range" min="-40" max="20" step="1"><span id="txGainVal" style="width:44px;text-align:right"></span></div>
-      <div class="lvl"><div id="txLvl"></div></div>
     </div>
     <div class="group">
       <b>Behaviour</b>
@@ -304,7 +310,8 @@ function onStatus(s) {
     const cs = (s.channels || []).find(c => c.index === editing);
     $("eLvl").style.width = (cs ? pct(cs.rx_level) : 0) + "%";
   }
-  if (isOpen("setDlg")) { renderSettings(s, false); $("txLvl").style.width = pct(s.tx_level) + "%"; }
+  if (isOpen("setDlg")) renderSettings(s, false);
+  renderTX(s);
 }
 
 // ---------- edit dialog ----------
@@ -343,7 +350,6 @@ function renderSettings(s, force) {
     $("unkeyMs").value = c.unkey_timeout_ms; $("protoName").value = c.protocol_name;
     $("maxTx").value = c.max_tx_seconds;
     $("autoDax").checked = c.set_slice_dax; $("logTraffic").checked = c.log_traffic;
-    $("txGain").value = c.tx_gain_db; $("txGainVal").textContent = c.tx_gain_db + " dB";
   }
 }
 $("btnSettings").onclick = async () => {
@@ -358,13 +364,39 @@ $("btnConnect").onclick = () => {
   call("Connect", ip ? "" : serial, ip);
 };
 $("btnDisconnect").onclick = () => call("Disconnect");
-$("txGain").oninput = () => $("txGainVal").textContent = $("txGain").value + " dB";
-$("txGain").onchange = () => call("SetTXGain", +$("txGain").value);
+// ---------- TX audio strip ----------
+const fmtDb = v => (v > 0 ? "+" : "") + v + " dB";
+let txDragging = false;
+function renderTX(s) {
+  if (!txDragging && document.activeElement !== $("txGain")) {
+    $("txGain").value = s.config.tx_gain_db;
+    $("txGainVal").textContent = fmtDb(s.config.tx_gain_db);
+  }
+  $("txLvl").style.width = pct(s.tx_level) + "%";
+  const st = $("txState");
+  st.textContent = s.tx_owner || "Idle";
+  st.className = s.tx_owner ? "on" : "dim";
+}
+// Apply while dragging (throttled) so the level can be set during a transmission.
+let txSend = null;
+$("txGain").oninput = () => {
+  txDragging = true;
+  const v = +$("txGain").value;
+  $("txGainVal").textContent = fmtDb(v);
+  clearTimeout(txSend);
+  txSend = setTimeout(() => call("SetTXGain", v), 80);
+};
+$("txGain").onchange = () => {
+  txDragging = false;
+  clearTimeout(txSend);
+  call("SetTXGain", +$("txGain").value);
+  $("txGain").blur();
+};
 $("setSave").onclick = async () => {
   try {
     await call("SetOptions", {
       unkey_timeout_ms: +$("unkeyMs").value, protocol_name: $("protoName").value, max_tx_seconds: +$("maxTx").value,
-      set_slice_dax: $("autoDax").checked, log_traffic: $("logTraffic").checked, tx_gain_db: +$("txGain").value,
+      set_slice_dax: $("autoDax").checked, log_traffic: $("logTraffic").checked,
     });
   } catch { return; }
   close("setDlg");
