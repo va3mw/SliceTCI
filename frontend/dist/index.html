@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlexTCI</title>
+<style>
+:root {
+  --bg: #181a1f; --panel: #20232a; --panel2: #262a33; --line: #343945;
+  --text: #e3e6ec; --dim: #8b93a3; --accent: #4ea1ff; --ok: #3ecf8e;
+  --warn: #f0b429; --err: #ff5c5c; --tx: #ff3b3b;
+  --mono: "Cascadia Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 13px "Segoe UI", system-ui, sans-serif; }
+body { display: flex; flex-direction: column; }
+header { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+  background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .3px; }
+.pill { padding: 3px 10px; border-radius: 999px; font-size: 12px; background: var(--panel2);
+  border: 1px solid var(--line); color: var(--dim); white-space: nowrap; }
+.pill.ok { color: var(--ok); border-color: #2a6b52; }
+.pill.warn { color: var(--warn); border-color: #6b5520; }
+.pill.err { color: var(--err); border-color: #6b2a2a; }
+.pill.tx { background: var(--tx); color: #fff; border-color: var(--tx); font-weight: 600; }
+.spacer { flex: 1; }
+main { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; overflow: auto; flex: 0 0 auto; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+section h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); font-weight: 600; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+label { color: var(--dim); }
+select, input { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 5px; padding: 5px 7px; font: inherit; }
+input[type=number] { width: 80px; }
+input[type=checkbox] { width: auto; }
+select:focus, input:focus { outline: 1px solid var(--accent); }
+button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 5px;
+  padding: 5px 12px; font: inherit; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #0b1220; font-weight: 600; }
+button:disabled { opacity: .45; cursor: default; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; color: var(--dim); font-weight: 500; font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+td { padding: 5px 6px; border-bottom: 1px solid #2b2f38; vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+.mono { font-family: var(--mono); }
+.dim { color: var(--dim); }
+.freq { font-family: var(--mono); font-size: 14px; }
+.meter { width: 70px; height: 8px; background: #11141a; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
+.meter > div { height: 100%; width: 0; background: var(--ok); transition: width .2s; }
+.err-text { color: var(--err); font-size: 12px; }
+.clients { font-size: 12px; color: var(--dim); }
+.clients .tx { color: var(--tx); font-weight: 600; }
+#logwrap { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 180px; margin: 0 16px 12px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+#logbar { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+#logbar h2 { margin: 0 8px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); }
+#log { flex: 1; overflow: auto; font-family: var(--mono); font-size: 12px; padding: 6px 10px; white-space: pre-wrap; word-break: break-all; }
+.l { line-height: 1.45; }
+.l .t { color: #6c7486; } .l .s { color: #7aa7d9; }
+.l.TRAFFIC { color: #8b93a3; } .l.DEBUG { color: #b2b8c4; }
+.l.WARN { color: var(--warn); } .l.ERROR { color: var(--err); }
+#toast { position: fixed; right: 16px; bottom: 16px; background: #3a1f1f; border: 1px solid var(--err); color: #ffd2d2;
+  padding: 10px 14px; border-radius: 6px; display: none; max-width: 480px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 1000px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>FlexTCI</h1>
+  <span id="radioPill" class="pill">Radio: not connected</span>
+  <span id="stationPill" class="pill">Station: —</span>
+  <span id="txPill" class="pill">TX enabled: —</span>
+  <span class="spacer"></span>
+  <span id="ownerPill" class="pill" style="display:none"></span>
+</header>
+
+<main>
+  <div class="grid2">
+    <section>
+      <h2>Radio</h2>
+      <div class="row">
+        <label for="radioSel">Radio</label>
+        <select id="radioSel" style="min-width:260px"></select>
+        <label for="manualIp">or IP</label>
+        <input id="manualIp" placeholder="192.168.1.50" style="width:130px">
+        <button id="btnConnect" class="primary">Connect</button>
+        <button id="btnDisconnect">Disconnect</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label for="stationSel">Station</label>
+        <select id="stationSel" style="min-width:260px"></select>
+        <span class="dim" id="stationHint"></span>
+      </div>
+    </section>
+    <section>
+      <h2>Transmit &amp; options</h2>
+      <div class="row">
+        <label for="txDev">DAX TX device</label>
+        <select id="txDev" style="min-width:260px"></select>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label for="unkeyMs" title="Unkey if the transmitting client sends no TX audio for this long">Safety unkey (ms)</label>
+        <input id="unkeyMs" type="number" min="500" max="10000" step="100">
+        <label for="protoName" title="First argument of PROTOCOL: in the init burst">Protocol name</label>
+        <input id="protoName" style="width:110px">
+        <label><input id="autoDax" type="checkbox"> Set slice DAX channel</label>
+        <button id="btnOptions">Save</button>
+      </div>
+    </section>
+  </div>
+
+  <section>
+    <div class="row" style="margin-bottom:8px">
+      <h2 style="margin:0">TCI channels</h2>
+      <span class="spacer"></span>
+      <label for="chanCount">Channels</label>
+      <select id="chanCount"></select>
+      <button id="btnRefreshDev" title="Re-scan Windows audio devices">Refresh devices</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th>#</th><th>Slice</th><th>TCI port</th><th>DAX ch</th><th>DAX RX device</th><th></th>
+        <th>Status</th><th>Frequency</th><th>Mode</th><th>RX</th><th>Clients</th>
+      </tr></thead>
+      <tbody id="chanBody"></tbody>
+    </table>
+  </section>
+</main>
+
+<div id="logwrap">
+  <div id="logbar">
+    <h2>Log</h2>
+    <label for="logLevel">Show</label>
+    <select id="logLevel">
+      <option value="0">Traffic +</option>
+      <option value="1">Debug +</option>
+      <option value="2" selected>Info +</option>
+      <option value="3">Warnings +</option>
+      <option value="4">Errors</option>
+    </select>
+    <label><input id="logTraffic" type="checkbox"> Capture TCI/API traffic</label>
+    <input id="logFilter" placeholder="filter text" style="width:180px">
+    <label><input id="logFollow" type="checkbox" checked> Follow</label>
+    <span class="spacer"></span>
+    <button id="btnCopyLog">Copy</button>
+    <button id="btnClearLog">Clear</button>
+    <button id="btnLogFolder">Open log folder</button>
+  </div>
+  <div id="log"></div>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const api = () => window.go.main.App;
+const LEVELS = { TRAFFIC: 0, DEBUG: 1, INFO: 2, WARN: 3, ERROR: 4 };
+const MAXLOG = 4000;
+let status = null, devices = { capture: [], render: [] };
+let logEntries = [], lastLogId = 0;
+let renderedCount = -1;
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = "none", 6000);
+}
+async function call(fn, ...args) {
+  try { return await api()[fn](...args); } catch (e) { toast(String(e)); throw e; }
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function fmtFreq(hz) {
+  if (!hz) return "—";
+  const s = String(hz).padStart(7, "0");
+  return (s.slice(0, -6) + "." + s.slice(-6, -3) + "." + s.slice(-3));
+}
+function setOptions(sel, items, value) {
+  sel.innerHTML = items.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("");
+  sel.value = value;
+}
+
+// ---------- header + radio ----------
+function renderHeader(s) {
+  const r = s.radio;
+  const rp = $("radioPill");
+  if (r.connected) { rp.className = "pill ok"; rp.textContent = `Radio: ${r.model || "FlexRadio"} ${r.ip}`; }
+  else if (s.config.auto_connect && (s.config.radio_ip || s.config.radio_serial)) { rp.className = "pill warn"; rp.textContent = "Radio: connecting…"; }
+  else { rp.className = "pill"; rp.textContent = "Radio: not connected"; }
+  const sp = $("stationPill");
+  if (r.bound_station) { sp.className = "pill ok"; sp.textContent = `Station: ${r.bound_station}`; }
+  else { sp.className = r.connected ? "pill warn" : "pill"; sp.textContent = r.connected ? "Station: not bound" : "Station: —"; }
+  const tp = $("txPill");
+  if (!r.connected) { tp.className = "pill"; tp.textContent = "TX enabled: —"; }
+  else if (r.interlock.tx_allowed) { tp.className = "pill ok"; tp.textContent = "TX enabled"; }
+  else { tp.className = "pill err"; tp.textContent = "TX inhibited " + (r.interlock.reason || ""); }
+  const op = $("ownerPill");
+  if (s.tx_owner) { op.style.display = ""; op.className = "pill tx"; op.textContent = s.tx_owner; }
+  else op.style.display = "none";
+}
+
+function renderRadioPickers(s) {
+  const sel = $("radioSel");
+  if (document.activeElement !== sel) {
+    const items = [["", s.radios.length ? "— select radio —" : "— no radios found —"]]
+      .concat(s.radios.map(r => [r.serial, `${r.model} "${r.nickname}" ${r.ip} (${r.status})`]));
+    const want = sel.value || s.config.radio_serial;
+    setOptions(sel, items, s.radios.some(r => r.serial === want) ? want : "");
+  }
+  const st = $("stationSel");
+  if (document.activeElement !== st) {
+    const names = (s.radio.stations || []).map(x => x.name);
+    const cur = s.config.station;
+    const items = [["", "Auto (only station)"]].concat(names.map(n => [n, n]));
+    if (cur && !names.includes(cur)) items.push([cur, cur + " (not connected)"]);
+    setOptions(st, items, cur);
+  }
+  $("stationHint").textContent = s.radio.connected && !(s.radio.stations || []).length
+    ? "Start SmartSDR (or Maestro) so there is a station to bind to." : "";
+}
+
+// ---------- channels ----------
+function deviceOptions(selected, dax) {
+  const items = [["", `Auto (DAX Audio RX ${dax})`]].concat(devices.capture.map(d => [d.name, d.name]));
+  if (selected && !devices.capture.some(d => d.name === selected)) items.push([selected, selected + " (missing)"]);
+  return items;
+}
+
+function buildChannelRows() {
+  const cfg = status.config;
+  const n = cfg.channel_count;
+  const body = $("chanBody");
+  body.innerHTML = "";
+  for (let i = 0; i < n; i++) {
+    const c = cfg.channels[i];
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="dim">${i + 1}</td>
+      <td><select data-f="slice">${"ABCDEFGH".split("").map(l => `<option>${l}</option>`).join("")}</select></td>
+      <td><input data-f="port" type="number" min="1024" max="65535"></td>
+      <td><select data-f="dax">${[1,2,3,4,5,6,7,8].map(d => `<option>${d}</option>`).join("")}</select></td>
+      <td><select data-f="rx" style="max-width:260px"></select></td>
+      <td><button data-a="apply" disabled>Apply</button> <button data-a="reset" title="Back to defaults">↺</button></td>
+      <td data-s="status"></td>
+      <td data-s="freq" class="freq"></td>
+      <td data-s="mode" class="mono"></td>
+      <td><div class="meter"><div data-s="meter"></div></div></td>
+      <td data-s="clients" class="clients"></td>`;
+    const q = f => tr.querySelector(`[data-f=${f}]`);
+    q("slice").value = c.slice; q("port").value = c.port; q("dax").value = c.dax;
+    setOptions(q("rx"), deviceOptions(c.rx_device, c.dax), c.rx_device);
+    const apply = tr.querySelector("[data-a=apply]");
+    const read = () => ({ slice: q("slice").value, port: +q("port").value, dax: +q("dax").value, rx_device: q("rx").value });
+    const dirty = () => {
+      const v = read(), o = status.config.channels[i];
+      apply.disabled = v.slice === o.slice && v.port === o.port && v.dax === o.dax && v.rx_device === o.rx_device;
+    };
+    tr.querySelectorAll("[data-f]").forEach(el => el.addEventListener("input", dirty));
+    q("dax").addEventListener("change", () => {
+      const cur = q("rx").value; setOptions(q("rx"), deviceOptions(cur, q("dax").value), cur);
+    });
+    apply.onclick = async () => {
+      await call("UpdateChannel", i, read());
+      status = await call("GetStatus"); buildChannelRows(); updateChannelStatus();
+    };
+    tr.querySelector("[data-a=reset]").onclick = async () => {
+      await call("ResetChannel", i);
+      status = await call("GetStatus"); buildChannelRows(); updateChannelStatus();
+    };
+    body.appendChild(tr);
+  }
+  renderedCount = n;
+}
+
+function updateChannelStatus() {
+  const rows = $("chanBody").children;
+  for (let i = 0; i < rows.length; i++) {
+    const tr = rows[i];
+    const cs = (status.channels || []).find(c => c.index === i);
+    const s = f => tr.querySelector(`[data-s=${f}]`);
+    if (!cs) { s("status").innerHTML = '<span class="dim">stopped</span>'; continue; }
+    let st;
+    if (cs.error) st = `<span class="err-text" title="${esc(cs.error)}">port error</span>`;
+    else if (!status.radio.connected) st = '<span class="dim">listening, no radio</span>';
+    else if (!cs.present) st = `<span style="color:var(--warn)">Slice ${cs.slice} not open</span>`;
+    else if (cs.trx) st = '<span style="color:var(--tx);font-weight:600">TRANSMIT</span>';
+    else st = `<span style="color:var(--ok)">ready</span>${cs.tx_enable ? "" : ' <span class="err-text">TX off</span>'}`;
+    s("status").innerHTML = st;
+    s("freq").textContent = cs.present ? fmtFreq(cs.freq_hz) : "—";
+    s("mode").textContent = cs.present ? (cs.mode || "").toUpperCase() : "";
+    s("meter").style.width = Math.min(100, Math.round(Math.sqrt(cs.rx_level) * 100)) + "%";
+    s("clients").innerHTML = (cs.clients || []).length
+      ? cs.clients.map(c => `<div class="${c.tx ? "tx" : ""}">#${c.id} ${esc(c.remote)}${c.audio ? ` · audio ${c.rate / 1000}k ${c.format}/${c.channels}ch` : ""}${c.tx ? " · TX" : ""}</div>`).join("")
+      : "none";
+  }
+}
+
+function renderOptions(s, force) {
+  const c = s.config;
+  const ae = document.activeElement;
+  if (force || ![$("unkeyMs"), $("protoName")].includes(ae)) {
+    $("unkeyMs").value = c.unkey_timeout_ms; $("protoName").value = c.protocol_name;
+    $("autoDax").checked = c.set_slice_dax;
+  }
+  $("logTraffic").checked = c.log_traffic;
+  $("chanCount").value = c.channel_count;
+  if (ae !== $("txDev")) {
+    const items = [["", "Auto (DAX Audio TX)"]].concat(devices.render.map(d => [d.name, d.name]));
+    if (c.tx_device && !devices.render.some(d => d.name === c.tx_device)) items.push([c.tx_device, c.tx_device + " (missing)"]);
+    setOptions($("txDev"), items, c.tx_device);
+  }
+}
+
+function onStatus(s) {
+  status = s;
+  renderHeader(s);
+  renderRadioPickers(s);
+  renderOptions(s, false);
+  if (renderedCount !== s.config.channel_count) buildChannelRows();
+  updateChannelStatus();
+}
+
+// ---------- log ----------
+function logLine(e) {
+  return `<div class="l ${e.level}"><span class="t">${e.time}</span> ${e.level.padEnd(7)} <span class="s">${esc(e.source.padEnd(10))}</span> ${esc(e.msg)}</div>`;
+}
+function visible(e) {
+  const min = +$("logLevel").value, f = $("logFilter").value.toLowerCase();
+  return LEVELS[e.level] >= min && (!f || (e.msg + " " + e.source).toLowerCase().includes(f));
+}
+function redrawLog() {
+  $("log").innerHTML = logEntries.filter(visible).map(logLine).join("");
+  if ($("logFollow").checked) $("log").scrollTop = $("log").scrollHeight;
+}
+function addLogs(batch) {
+  batch = batch.filter(e => e.id > lastLogId);
+  if (!batch.length) return;
+  lastLogId = batch[batch.length - 1].id;
+  logEntries.push(...batch);
+  if (logEntries.length > MAXLOG) { logEntries = logEntries.slice(-MAXLOG); redrawLog(); return; }
+  const log = $("log");
+  log.insertAdjacentHTML("beforeend", batch.filter(visible).map(logLine).join(""));
+  while (log.childElementCount > MAXLOG) log.firstElementChild.remove();
+  if ($("logFollow").checked) log.scrollTop = log.scrollHeight;
+}
+
+// ---------- wiring ----------
+async function refreshDevices() {
+  devices = await call("GetDevices");
+  if (devices.error) toast("Audio devices: " + devices.error);
+  devices.capture = devices.capture || []; devices.render = devices.render || [];
+  if (status) { renderOptions(status, false); buildChannelRows(); updateChannelStatus(); }
+}
+
+async function init() {
+  setOptions($("chanCount"), [1, 2, 3, 4, 5, 6, 7, 8].map(n => [n, n]), 1);
+  $("btnConnect").onclick = () => {
+    const serial = $("radioSel").value, ip = $("manualIp").value.trim();
+    if (!serial && !ip) return toast("Pick a radio or enter its IP address.");
+    call("Connect", ip ? "" : serial, ip);
+  };
+  $("btnDisconnect").onclick = () => call("Disconnect");
+  $("stationSel").onchange = e => call("SelectStation", e.target.value);
+  $("txDev").onchange = e => call("SetTXDevice", e.target.value);
+  $("chanCount").onchange = async e => {
+    await call("SetChannelCount", +e.target.value).catch(() => {});
+    onStatus(await call("GetStatus"));
+  };
+  $("btnRefreshDev").onclick = refreshDevices;
+  const saveOptions = () => call("SetOptions", {
+    unkey_timeout_ms: +$("unkeyMs").value, protocol_name: $("protoName").value,
+    set_slice_dax: $("autoDax").checked, log_traffic: $("logTraffic").checked,
+  });
+  $("btnOptions").onclick = saveOptions;
+  $("logTraffic").onchange = saveOptions;
+  $("logLevel").onchange = redrawLog;
+  $("logFilter").oninput = redrawLog;
+  $("btnClearLog").onclick = () => { logEntries = []; $("log").innerHTML = ""; };
+  $("btnCopyLog").onclick = () => {
+    const text = logEntries.filter(visible).map(e => `${e.time} ${e.level} ${e.source} ${e.msg}`).join("\n");
+    navigator.clipboard.writeText(text).then(() => toast("Log copied to clipboard"));
+  };
+  $("btnLogFolder").onclick = () => call("OpenLogFolder");
+
+  window.runtime.EventsOn("status", onStatus);
+  window.runtime.EventsOn("log", addLogs);
+  addLogs(await call("GetLogs", 0));
+  await refreshDevices();
+  const s = await call("GetStatus");
+  renderOptions(s, true);
+  onStatus(s);
+}
+window.addEventListener("load", init);
+</script>
+</body>
+</html>
