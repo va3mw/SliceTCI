@@ -82,21 +82,6 @@ func (a *App) Disconnect() { a.bridge.Disconnect() }
 
 func (a *App) SelectStation(name string) { a.bridge.SelectStation(name) }
 
-func (a *App) SetChannelCount(n int) error {
-	if n < 1 || n > config.MaxChannels {
-		return fmt.Errorf("channel count must be 1 to %d", config.MaxChannels)
-	}
-	c := a.cfg.Get()
-	c.ChannelCount = n
-	if err := validate(c); err != nil {
-		return err
-	}
-	a.cfg.Update(func(c *config.Config) { c.ChannelCount = n })
-	a.log.Log(logx.Info, "app", "channel count set to %d", n)
-	a.bridge.ApplyChannels()
-	return nil
-}
-
 func (a *App) UpdateChannel(i int, ch config.Channel) error {
 	if i < 0 || i >= config.MaxChannels {
 		return fmt.Errorf("bad channel %d", i)

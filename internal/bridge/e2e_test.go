@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"net"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -328,6 +329,15 @@ func TestEndToEnd(t *testing.T) {
 		if radio.sent(bad) {
 			t.Errorf("sent rejected command %q", bad)
 		}
+	}
+
+	// A web page (Origin header) must be refused.
+	hdr := http.Header{"Origin": []string{"https://evil.example"}}
+	if ws, resp, err := websocket.DefaultDialer.Dial(fmt.Sprintf("ws://127.0.0.1:%d/", tciPort), hdr); err == nil {
+		ws.Close()
+		t.Fatal("connection from a web page origin was accepted")
+	} else if resp == nil || resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("web page origin: want 403, got %v %v", resp, err)
 	}
 
 	// "localhost" may resolve to IPv6 loopback; that must work too.

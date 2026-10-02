@@ -3,6 +3,10 @@ package flex
 import (
 	"net"
 	"testing"
+	"time"
+
+	"github.com/va3mw/FlexTCI/internal/logx"
+	"github.com/va3mw/FlexTCI/internal/vita"
 )
 
 func TestParseInfo(t *testing.T) {
@@ -35,6 +39,43 @@ func TestTxEnabled(t *testing.T) {
 	s.TX.Inhibit = true
 	if s.TxEnabled() {
 		t.Error("inhibit ignored")
+	}
+}
+
+// Audio packets from anything but the radio must be dropped.
+func TestUDPOnlyFromRadio(t *testing.T) {
+	l := logx.New(t.TempDir())
+	defer l.Close()
+	r := &Radio{log: l.Src("t"), streams: map[uint32]*stream{}}
+	got := make(chan uint32, 10)
+	r.streams[0x04000008] = &stream{id: 0x04000008, handler: func(p vita.Packet) { got <- p.StreamID }}
+	sock, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sock.Close()
+	go r.udpLoop(sock, net.IPv4(127, 0, 0, 1))
+
+	pkt := vita.BuildAudio(0x04000008, 0, vita.ClassFloat24k, make([]float32, 256))
+	send := func(from net.IP) {
+		c, err := net.DialUDP("udp4", &net.UDPAddr{IP: from}, sock.LocalAddr().(*net.UDPAddr))
+		if err != nil {
+			t.Skipf("cannot send from %v: %v", from, err)
+		}
+		defer c.Close()
+		c.Write(pkt)
+	}
+	send(net.IPv4(127, 0, 0, 2)) // another host
+	send(net.IPv4(127, 0, 0, 1)) // the radio
+	select {
+	case <-got:
+	case <-time.After(time.Second):
+		t.Fatal("packet from the radio was not delivered")
+	}
+	select {
+	case <-got:
+		t.Fatal("packet from another host was delivered")
+	case <-time.After(200 * time.Millisecond):
 	}
 }
 

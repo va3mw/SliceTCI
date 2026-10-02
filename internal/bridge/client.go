@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -220,8 +221,10 @@ func (c *client) toStereo48k(h tci.Header, s []float32) []float32 {
 	if chans != 1 && chans != 2 {
 		chans = c.chans
 	}
+	// Only TCI rates are accepted: an arbitrary header rate (say 1 Hz) would
+	// make the resampler allocate hundreds of MB per packet.
 	rate := int(h.SampleRate)
-	if rate == 0 {
+	if !validRate(rate) {
 		rate = c.rate
 	}
 	if chans == 1 {
@@ -240,6 +243,8 @@ func (c *client) toStereo48k(h tci.Header, s []float32) []float32 {
 	return c.txRs.Process(s)
 }
 
+func validRate(r int) bool { return r == 8000 || r == 12000 || r == 24000 || r == 48000 }
+
 // chronoFrame is the TX_CHRONO request for one block in the client's format.
 func (c *client) chronoFrame() (frame []byte, frames48k int) {
 	c.mu.Lock()
@@ -257,7 +262,13 @@ func (c *client) txBufferMs() int {
 }
 
 func (c *client) handleText(frame string) {
-	c.ch.lg.Traffic("#%d <- %s", c.id, strings.TrimSpace(frame))
+	if c.ch.lg.TrafficOn() {
+		s := strings.TrimSpace(frame)
+		if len(s) > 400 { // a client may send up to 1 MB; keep the log usable
+			s = s[:400] + fmt.Sprintf("… (%d bytes)", len(frame))
+		}
+		c.ch.lg.Traffic("#%d <- %s", c.id, s)
+	}
 	for _, cmd := range tci.Parse(frame) {
 		c.dispatch(cmd)
 	}
@@ -464,7 +475,7 @@ func (c *client) dispatch(cmd tci.Command) {
 		ch.updateCapture()
 	case "audio_samplerate":
 		if len(a) >= 1 {
-			if r, ok := atoi(a[0]); ok && (r == 8000 || r == 12000 || r == 24000 || r == 48000) {
+			if r, ok := atoi(a[0]); ok && validRate(r) {
 				c.mu.Lock()
 				c.rate = r
 				if !c.samplesSet {
@@ -519,7 +530,7 @@ func (c *client) dispatch(cmd tci.Command) {
 	case "start", "stop":
 		ch.lg.Debug("#%d %s ignored (radio power is not controlled over TCI)", c.id, cmd.Name)
 	default:
-		if !c.ignored[cmd.Name] {
+		if !c.ignored[cmd.Name] && len(c.ignored) < 64 { // bounded: names come from the client
 			c.ignored[cmd.Name] = true
 			ch.lg.Info("#%d ignoring unsupported command %s (logged once)", c.id, strings.ToUpper(cmd.Name))
 		}

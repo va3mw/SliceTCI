@@ -130,10 +130,9 @@ func (f *fir) process(in []float32) []float32 {
 
 // Fifo is a thread-safe FIFO of interleaved stereo float32 frames.
 type Fifo struct {
-	mu   sync.Mutex
-	buf  []float32
-	max  int // max samples
-	drop int // samples dropped on overflow
+	mu  sync.Mutex
+	buf []float32
+	max int // max samples; the oldest audio is dropped beyond this
 }
 
 func NewFifo(maxFrames int) *Fifo { return &Fifo{max: maxFrames * 2} }
@@ -144,7 +143,6 @@ func (f *Fifo) Write(s []float32) {
 	if over := len(f.buf) - f.max; over > 0 {
 		over += over & 1
 		f.buf = f.buf[over:]
-		f.drop += over
 	}
 	f.mu.Unlock()
 }

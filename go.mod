@@ -2,6 +2,8 @@ module github.com/va3mw/FlexTCI
 
 go 1.26.2
 
+toolchain go1.26.6
+
 require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/wailsapp/wails/v2 v2.16.0

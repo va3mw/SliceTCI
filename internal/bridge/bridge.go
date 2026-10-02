@@ -28,7 +28,6 @@ type txOwner struct {
 	c           *client
 	tciAudio    bool
 	tune        bool
-	sliceIdx    int
 	since       time.Time
 	lastAudio   time.Time
 	lastChrono  time.Time
@@ -245,7 +244,7 @@ func (b *Bridge) requestTX(c *client, tciAudio, tune bool) error {
 	}
 	sl, ok := snap.SliceByLetter(c.ch.cfg.Slice)
 	if !ok {
-		return fmt.Errorf("Slice %s is not open", c.ch.cfg.Slice)
+		return fmt.Errorf("slice %s is not open", c.ch.cfg.Slice)
 	}
 	if snap.TX.Inhibit {
 		return errors.New("transmit is inhibited on the radio")
@@ -262,7 +261,7 @@ func (b *Bridge) requestTX(c *client, tciAudio, tune bool) error {
 	now := time.Now()
 	o := b.tx
 	if o == nil {
-		o = &txOwner{c: c, sliceIdx: sl.Index, since: now}
+		o = &txOwner{c: c, since: now}
 		b.tx = o
 	}
 	o.tciAudio, o.tune = tciAudio, tune

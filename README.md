@@ -35,6 +35,15 @@ Log4OM ──ws://127.0.0.1:50001──┘   per slice)         └── UDP  �
 * Any TCI client may unkey TCI transmit. Transmit started in SmartSDR (MOX, mic PTT) is never unkeyed by a client's `TRX:false`.
 * If the slice is in a non-digital mode while TCI audio transmits, the TX audio source is switched to DAX for the duration and then restored.
 
+## Security
+
+TCI has no authentication, so FlexTCI limits who can reach it:
+* TCI ports listen on loopback only (`127.0.0.1` and `[::1]`), never on the LAN.
+* **Web pages are refused.** A browser can open `ws://127.0.0.1:…` from any site you visit, so connections that carry a non-localhost `Origin` header get HTTP 403 and are logged. Native clients send no `Origin` header and are not affected.
+* Audio UDP packets are accepted only from the radio's IP address.
+* Client input is bounded: audio sample rates must be TCI rates, frames are capped at 1 MB, and logged frames and the ignored-command list have size limits.
+* The Go toolchain is pinned in `go.mod` to a release with no known reachable vulnerabilities (`govulncheck ./...`).
+
 ## Logging
 
 The log window filters by level (Traffic, Debug, Info, Warnings, Errors) and by text. **Capture TCI/API traffic** records every TCI line in each direction (`#n <-`, `#n ->`) and every radio API command and status. Logs are also written daily to `%APPDATA%\FlexTCI\logs\` (the **Open log folder** button). Each unkey line carries a TX summary, for example `keyed 12.6 s, 590 TX_CHRONO sent, 590 audio blocks received`.

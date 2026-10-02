@@ -41,14 +41,24 @@ func (r *Radio) openUDP() (*net.UDPConn, int, error) {
 	return nil, 0, fmt.Errorf("no free UDP port for audio streams: %w", lastErr)
 }
 
-// udpLoop dispatches incoming VITA packets to stream handlers.
-func (r *Radio) udpLoop(c *net.UDPConn) {
+// udpLoop dispatches incoming VITA packets to stream handlers. Only packets
+// from the radio are accepted, so another host on the LAN cannot inject
+// audio by guessing a stream id. radio is nil if the address could not be
+// resolved, which disables the check.
+func (r *Radio) udpLoop(c *net.UDPConn, radio net.IP) {
 	buf := make([]byte, 16384)
-	var unknown int
+	var unknown, foreign int
 	for {
-		n, _, err := c.ReadFromUDP(buf)
+		n, src, err := c.ReadFromUDP(buf)
 		if err != nil {
 			return
+		}
+		if radio != nil && !src.IP.Equal(radio) {
+			foreign++
+			if foreign == 1 || foreign%1000 == 0 {
+				r.log.Warn("ignored UDP audio packet from %s, not the radio (%d so far)", src.IP, foreign)
+			}
+			continue
 		}
 		p, err := vita.Parse(buf[:n])
 		if err != nil {

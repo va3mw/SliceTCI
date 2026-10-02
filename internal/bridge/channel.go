@@ -6,6 +6,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -44,14 +45,12 @@ type Channel struct {
 	daxSetFor int           // slice index we last set dax= on
 }
 
+// setRXGain changes the RX gain live. ch.cfg is read without a lock by other
+// goroutines and is never modified after creation; the gain lives only in
+// the atomic.
 func (ch *Channel) setRXGain(db int) {
-	ch.rxGain.Store(math.Float32bits(dbToGain(float64(db))))
-	ch.mu.Lock()
-	changed := ch.cfg.RXGain() != db
-	v := db
-	ch.cfg.RXGainDB = &v
-	ch.mu.Unlock()
-	if changed {
+	g := math.Float32bits(dbToGain(float64(db)))
+	if ch.rxGain.Swap(g) != g {
 		ch.lg.Info("RX gain %d dB", db)
 	}
 }
@@ -76,7 +75,27 @@ func newChannel(b *Bridge, idx int, cfg config.Channel) *Channel {
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  64 * 1024,
 	WriteBufferSize: 64 * 1024,
-	CheckOrigin:     func(*http.Request) bool { return true }, // bound to localhost only
+	CheckOrigin:     allowedOrigin,
+}
+
+// allowedOrigin blocks web pages. Binding to localhost does not stop a
+// browser: any site the operator visits can open ws://127.0.0.1:50001 and
+// key the transmitter. Browsers always send an Origin header; native TCI
+// clients (WSJT-X, Hamlib, loggers) send none, or a localhost one.
+func allowedOrigin(r *http.Request) bool {
+	o := r.Header.Get("Origin")
+	if o == "" {
+		return true
+	}
+	u, err := url.Parse(o)
+	if err != nil {
+		return false
+	}
+	switch u.Hostname() {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	return false
 }
 
 func (ch *Channel) start() {
@@ -127,6 +146,11 @@ func (ch *Channel) stop() {
 }
 
 func (ch *Channel) serveWS(w http.ResponseWriter, r *http.Request) {
+	if !allowedOrigin(r) {
+		ch.lg.Warn("refused connection from web page %q (browsers may not control the radio)", r.Header.Get("Origin"))
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		ch.lg.Warn("websocket upgrade from %s failed: %v", r.RemoteAddr, err)

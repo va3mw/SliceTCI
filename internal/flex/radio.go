@@ -221,7 +221,11 @@ func (r *Radio) session(ip string, stop chan struct{}) error {
 	if err != nil {
 		r.log.Error("%v (audio direct from the radio will not work)", err)
 	} else {
-		go r.udpLoop(udp)
+		var radioIP net.IP
+		if a, err := net.ResolveIPAddr("ip4", ip); err == nil {
+			radioIP = a.IP
+		}
+		go r.udpLoop(udp, radioIP)
 	}
 	r.mu.Lock()
 	r.conn = conn
