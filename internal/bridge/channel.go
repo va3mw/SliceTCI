@@ -269,6 +269,16 @@ func (ch *Channel) pinAndBroadcast(origin *client, key string, val any, apply fu
 	}
 }
 
+// broadcast sends lines to every client on this channel.
+func (ch *Channel) broadcast(lines ...string) {
+	ch.mu.Lock()
+	cl := ch.clientList()
+	ch.mu.Unlock()
+	for _, c := range cl {
+		c.sendText(lines...)
+	}
+}
+
 // resync drops pins and pushes the radio's real state (used after a rejected command).
 func (ch *Channel) resync() {
 	ch.mu.Lock()

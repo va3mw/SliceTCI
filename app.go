@@ -208,6 +208,7 @@ type Options struct {
 	ProtocolName   string `json:"protocol_name"`
 	SetSliceDAX    bool   `json:"set_slice_dax"`
 	DigitalOnTX    bool   `json:"digital_on_tx"`
+	Spots          bool   `json:"spots"`
 	LogTraffic     bool   `json:"log_traffic"`
 	MaxTXSeconds   int    `json:"max_tx_seconds"`
 }
@@ -225,11 +226,16 @@ func (a *App) SetOptions(o Options) error {
 	}
 	a.cfg.Update(func(c *config.Config) {
 		c.UnkeyTimeoutMs, c.ProtocolName, c.SetSliceDAX, c.LogTraffic = o.UnkeyTimeoutMs, o.ProtocolName, o.SetSliceDAX, o.LogTraffic
-		c.MaxTXSeconds, c.DigitalOnTX = o.MaxTXSeconds, o.DigitalOnTX
+		c.MaxTXSeconds, c.DigitalOnTX, c.Spots = o.MaxTXSeconds, o.DigitalOnTX, o.Spots
 	})
+	if !o.Spots {
+		if n := a.bridge.ClearSpots(); n > 0 {
+			a.log.Log(logx.Info, "app", "spots turned off: removed %d TCI spots from the radio", n)
+		}
+	}
 	a.log.SetTraffic(o.LogTraffic)
-	a.log.Log(logx.Info, "app", "options: unkey timeout %d ms, max TX %d s, protocol name %q, auto DAX %v, digital on TX %v, traffic log %v",
-		o.UnkeyTimeoutMs, o.MaxTXSeconds, o.ProtocolName, o.SetSliceDAX, o.DigitalOnTX, o.LogTraffic)
+	a.log.Log(logx.Info, "app", "options: unkey timeout %d ms, max TX %d s, protocol name %q, auto DAX %v, digital on TX %v, spots %v, traffic log %v",
+		o.UnkeyTimeoutMs, o.MaxTXSeconds, o.ProtocolName, o.SetSliceDAX, o.DigitalOnTX, o.Spots, o.LogTraffic)
 	a.pushStatus()
 	return nil
 }

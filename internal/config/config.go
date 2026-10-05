@@ -25,6 +25,11 @@ const DefaultTXGainDB = -6
 // under a minute; five minutes still allows long RTTY/SSB overs.
 const DefaultMaxTXSeconds = 300
 
+// SpotLifetimeSeconds is how long a spot added over TCI stays on the
+// panadapter. TCI has no expiry of its own, so without this spots from a
+// client that never deletes them would pile up.
+const SpotLifetimeSeconds = 900
+
 // DefaultRXGainDB brings the radio's full-scale DAX stream down to the level
 // digital-mode apps expect (WSJT-X wants roughly 30 dB on its meter; the raw
 // stream reads about 76 dB).
@@ -56,6 +61,7 @@ type Config struct {
 	ProtocolName   string    `json:"protocol_name"`
 	SetSliceDAX    bool      `json:"set_slice_dax"`
 	DigitalOnTX    bool      `json:"digital_on_tx"` // TCI-audio TX: USB/LSB -> DIGU/DIGL and TX DAX on
+	Spots          bool      `json:"spots"`         // TCI spots <-> panadapter spots
 	LogTraffic     bool      `json:"log_traffic"`
 	AutoConnect    bool      `json:"auto_connect"`
 }
@@ -68,6 +74,7 @@ func Default() *Config {
 		ProtocolName:   "ExpertSDR3",
 		SetSliceDAX:    true,
 		DigitalOnTX:    true,
+		Spots:          true,
 		AutoConnect:    true,
 	}
 	c.normalize()

@@ -35,6 +35,8 @@ type fakeRadio struct {
 	clientPort int
 	txPackets  chan vita.Packet
 	rxStop     chan struct{}
+
+	spotIdx int // last spot index handed out
 }
 
 const (
@@ -109,7 +111,7 @@ func newFakeRadio(t *testing.T) *fakeRadio {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fakeRadio{ln: ln, cmds: make(chan string, 1000), udp: udp, txPackets: make(chan vita.Packet, 10000), rxStop: make(chan struct{})}
+	f := &fakeRadio{spotIdx: 6, ln: ln, cmds: make(chan string, 1000), udp: udp, txPackets: make(chan vita.Packet, 10000), rxStop: make(chan struct{})}
 	t.Cleanup(func() { close(f.rxStop); udp.Close(); ln.Close() })
 	flex.VitaPort = udp.LocalAddr().(*net.UDPAddr).Port
 	go f.serve()
@@ -149,6 +151,14 @@ func (f *fakeRadio) serve() {
 			// 6600M); this ordering once deadlocked keying for 5 s.
 			send(fmt.Sprintf("S0000ABCD|stream 0x%08X type=dax_tx client_handle=0x0000ABCD tx=1", fakeTXStream))
 			send("R" + seq + fmt.Sprintf("|0|%08X", fakeTXStream))
+		case strings.HasPrefix(cmd, "spot add "):
+			// Status first, then the reply carrying the new index.
+			f.spotIdx++
+			send(fmt.Sprintf("S0000ABCD|spot %d %s", f.spotIdx, strings.TrimPrefix(cmd, "spot add ")))
+			send(fmt.Sprintf("R%s|0|%d", seq, f.spotIdx))
+		case strings.HasPrefix(cmd, "spot remove "):
+			send("R" + seq + "|0|")
+			send("S0000ABCD|spot " + strings.TrimPrefix(cmd, "spot remove ") + " removed")
 		case cmd == "info":
 			send("R" + seq + `|0|model="FLEX-6600M",chassis_serial="1234",name="RXb-VA3MW",callsign="VA3MW"`)
 		case cmd == "sub interlock all" || cmd == "client program FlexTCI":

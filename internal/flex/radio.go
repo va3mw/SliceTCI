@@ -118,6 +118,11 @@ type Radio struct {
 	onUpdate func()
 	notifyCh chan struct{}
 
+	// OnSpot (optional, set before Connect) receives "triggered" and
+	// "removed" spot events. It is called on the connection reader and must
+	// not block.
+	OnSpot func(index int, event string)
+
 	mu          sync.Mutex
 	conn        net.Conn
 	connected   bool
@@ -313,7 +318,7 @@ func (r *Radio) handleLine(line string) {
 		atomic.AddUint64(&r.epoch, 1)
 		r.log.Info("connected, our client handle 0x%08X", h)
 		// Interlock status arrives with "sub tx all"; there is no interlock subscription.
-		for _, s := range []string{"sub client all", "sub slice all", "sub tx all", "sub radio all"} {
+		for _, s := range []string{"sub client all", "sub slice all", "sub tx all", "sub radio all", "sub spot all"} {
 			r.Command(s, nil)
 		}
 		r.Command("info", r.onInfo)
@@ -460,6 +465,14 @@ func (r *Radio) handleStatus(body string) bool {
 	case "stream":
 		r.applyStream(fields)
 		return true
+	case "spot":
+		// spot <index> triggered [pan=0x...] | spot <index> removed | spot <index> key=value ...
+		if len(fields) >= 3 && (fields[2] == "triggered" || fields[2] == "removed") && r.OnSpot != nil {
+			if idx, err := strconv.Atoi(fields[1]); err == nil {
+				r.OnSpot(idx, fields[2])
+			}
+		}
+		return false
 	case "radio":
 		if len(fields) < 2 || !strings.Contains(fields[1], "=") {
 			return false // radio filter_sharpness ... etc.
@@ -713,6 +726,15 @@ func (r *Radio) TuneTX(on bool) {
 }
 func (r *Radio) SetTransmit(kv string) {
 	r.Command("transmit set "+kv, nil)
+}
+
+// AddSpot creates a panadapter spot from "callsign=... rx_freq=..." pairs.
+// The reply carries the new spot's index.
+func (r *Radio) AddSpot(kv string, cb func(code uint32, msg string)) {
+	r.Command("spot add "+kv, cb)
+}
+func (r *Radio) RemoveSpot(index int) {
+	r.Command(fmt.Sprintf("spot remove %d", index), nil)
 }
 
 func b01(b bool) string {

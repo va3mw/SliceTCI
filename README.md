@@ -62,9 +62,12 @@ The log window filters by level (Traffic, Debug, Info, Warnings, Errors) and by 
 | Tuning | `vfo` (A sets; B echoes A), `dds`/`if` (read-only), `modulation`, `rx_filter_band`, `rit_*`, `xit_*` |
 | TX | `trx` (incl. `tci` source), `tune`, `drive`, `tune_drive`, `tx_enable` |
 | Audio | `audio_start/stop`, `audio_samplerate` 8/12/24/48 kHz, `audio_stream_sample_type`, `audio_stream_channels`, `audio_stream_samples`, `tx_stream_audio_buffering`, TX_CHRONO pull model |
-| Ignored (logged once) | spots, CW macros/keyer, volume/mute, NB/NR/ANF, sensors, IQ, line-out, and anything unknown |
+| Spots | `spot`, `spot_delete`, `spot_clear` (in), `clicked_on_spot` (out) |
+| Ignored (logged once) | CW macros/keyer, volume/mute, NB/NR/ANF, sensors, IQ, line-out, and anything unknown |
 
 Set commands are echoed to every client right away (WSJT-X waits for this). The value is then held until the radio confirms it, which stops stale radio status from making the value bounce.
+
+Spots: `SPOT:callsign,mode,freqHz,ARGB,text;` becomes a panadapter spot (`spot add`, source `FlexTCI`) that the radio expires after 15 minutes. A callsign has one spot, so sending it again moves it. `SPOT_DELETE` and `SPOT_CLEAR` remove only spots that FlexTCI added (`spot remove <index>`, never `spot clear`), so cluster or N1MM spots are left alone. Clicking a TCI spot in SmartSDR sends `clicked_on_spot:callsign,freqHz;` to every TCI client. **Show TCI spots on the panadapter** in Settings turns all of this off.
 
 Modes: `modulations_list` is built from the slice's `mode_list` as reported by the radio. A FLEX-6600M without waveforms gives `lsb,usb,am,cw,digl,digu,sam,nfm,dfm,rtty`. The mapping is Flex FM/NFM↔`nfm` and FDV↔`freedv`. `DEVICE` reports the model from the radio's `info` reply.
 
@@ -94,7 +97,7 @@ internal/logx, config    logging and persisted settings
 
 ## Not done yet / open items
 
-* Split (VFO B to TX frequency), spots, CW macros, meters/sensors, IQ, and SmartLink are deferred, as are other phase 2/3 items in the requirements draft.
+* Split (VFO B to TX frequency), CW macros, meters/sensors, IQ, and SmartLink are deferred, as are other phase 2/3 items in the requirements draft.
 * The TX gain trim is a simple software gain. The level that gives full rated power (OI-15) still has to be measured.
 * `PROTOCOL` reports `ExpertSDR3,2.0` by default for client compatibility (OI-23). You can change it in the UI.
 * Tested on a FLEX-6600M: WSJT-X 3.0 and JTDX, each on its own port and slice, with JTDX set as TCI Client RX2. MSHV and Log4OM are still to be tested. Use the traffic log to capture sessions.

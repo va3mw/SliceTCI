@@ -552,6 +552,21 @@ func (c *client) dispatch(cmd tci.Command) {
 				c.sendText(tci.Fmt(cmd.Name, n))
 			}
 		}
+	case "spot", "spot_delete", "spot_clear":
+		if !b.cfg.Get().Spots {
+			ch.lg.Debug("#%d %s ignored (spots are turned off in Settings)", c.id, cmd.Raw)
+			return
+		}
+		switch cmd.Name {
+		case "spot":
+			b.addSpot(c, a)
+		case "spot_delete":
+			if len(a) >= 1 {
+				b.deleteSpot(c, a[0])
+			}
+		case "spot_clear":
+			ch.lg.Info("#%d cleared %d TCI spots", c.id, b.ClearSpots())
+		}
 	case "start", "stop":
 		ch.lg.Debug("#%d %s ignored (radio power is not controlled over TCI)", c.id, cmd.Name)
 	default:

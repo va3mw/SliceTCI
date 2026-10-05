@@ -59,6 +59,9 @@ type Bridge struct {
 	txPeak    atomic.Uint32 // float32 bits, TX audio peak since last status
 	dtxEpoch  atomic.Uint64 // radio session the dax_tx stream was prepared for
 
+	spotMu sync.Mutex
+	spots  map[string]*spot // by callsign; see spots.go
+
 	uiDirty atomic.Bool
 	quit    chan struct{}
 }
@@ -67,6 +70,7 @@ func New(l *logx.Logger, cfg *config.Store, onUI func()) *Bridge {
 	b := &Bridge{log: l, lg: l.Src("bridge"), cfg: cfg, onUI: onUI, quit: make(chan struct{})}
 	b.fifo = audio.NewFifo(audio.Rate) // up to 1 s of TX audio
 	b.radio = flex.NewRadio(l, b.onRadioUpdate)
+	b.radio.OnSpot = b.onSpotEvent
 	b.dtx = newDirectTX(b.radio, l.Src("dax-tx"))
 	b.newRender = b.dtx.start
 	b.disc = flex.NewDiscovery(l, b.notifyUI)
