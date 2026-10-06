@@ -29,6 +29,8 @@ Log4OM ──ws://127.0.0.1:50001──┘   per slice)         └── UDP  �
 
    ![WSJT-X Audio settings for FlexTCI](TCI-Audio.png)
 
+**Known WSJT-X issue (seen in WSJT-X improved 3.0.0 and 3.0.2):** if the slice is not already on WSJT-X's start-up frequency when WSJT-X is launched, WSJT-X shows **Rig Control Error** with the detail *TCI audio cannot be started as frequency is OOB*. WSJT-X does not send a frequency command at start-up, so FlexTCI cannot correct this. Either tune the slice to WSJT-X's frequency before starting WSJT-X, or after the error open **Settings** and close it again with **OK**; WSJT-X then reconnects and works normally.
+
 For more slices, run one WSJT-X instance per channel (`wsjtx --rig-name=SliceB`) and point each at its own port (50002, 50003, …).
 
 ## Transmit safety
