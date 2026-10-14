@@ -513,6 +513,39 @@ func TestStalePinAfterBandChange(t *testing.T) {
 	radio.expect(t, "slice tune 0 14.140000", time.Second)
 	radio.push("S0000ABCD|slice 0 RF_frequency=21.074000")
 	c.expect(t, "vfo:0,0,21074000;", 3*time.Second)
+
+	// Cross-band tune from the client, as logged on an AU-520 (v4.3.16):
+	// the radio acknowledges "slice tune" but reports the new frequency
+	// only as "transmit freq=". The client must stay on the new band; 0.5.1
+	// pushed the old frequency back after the pin expired.
+	c.send("VFO:0,0,18100000;")
+	c.expect(t, "vfo:0,0,18100000;", time.Second)
+	radio.expect(t, "slice tune 0 18.100000", time.Second)
+	radio.push("S0000ABCD|transmit freq=18.100000 rfpower=50 tunepower=10 tx_slice_mode=DIGU inhibit=0 dax=1")
+	radio.push("S0000ABCD|slice 0 wide=0")
+	c.expectNone(t, "vfo:0,0,", 2*time.Second)
+	radio.push("S0000ABCD|slice 0 wide=1") // any later status, pin expired
+	c.expectNone(t, "vfo:0,0,", 500*time.Millisecond)
+
+	// Band change in SmartSDR/Maestro: again only "transmit freq=".
+	radio.push("S0000ABCD|transmit freq=24.915000 rfpower=50 tunepower=10 tx_slice_mode=DIGU inhibit=0 dax=1")
+	c.expect(t, "vfo:0,0,24915000;", time.Second)
+}
+
+// expectNone fails if any frame starting with prefix arrives within d.
+func (c *tciClient) expectNone(t *testing.T, prefix string, d time.Duration) {
+	t.Helper()
+	deadline := time.After(d)
+	for {
+		select {
+		case s := <-c.text:
+			if strings.HasPrefix(s, prefix) {
+				t.Fatalf("unexpected %q", s)
+			}
+		case <-deadline:
+			return
+		}
+	}
 }
 
 // TestDirectAudio checks the no-DAX path: RX audio arrives as VITA-49 from

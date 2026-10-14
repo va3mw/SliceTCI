@@ -505,6 +505,23 @@ func (r *Radio) handleStatus(body string) bool {
 		if v, ok := kv["dax"]; ok {
 			r.tx.DAX = v == "1"
 		}
+		// A tune across bands ("slice tune" from a TCI client, or a band
+		// button in SmartSDR/Maestro) is reported only as "transmit freq=";
+		// the slice status never carries the new RF_frequency (seen on an
+		// AU-520, v4.3.16). The transmit frequency is the TX slice's
+		// frequency, so apply it there. Skipped with XIT on, where the two
+		// may differ.
+		if v, ok := kv["freq"]; ok {
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				hz := int64(f*1e6 + 0.5)
+				for _, sl := range r.slices {
+					if sl.TX && !sl.XITOn && sl.FreqHz != hz {
+						r.log.Debug("slice %d frequency %d -> %d (from transmit freq)", sl.Index, sl.FreqHz, hz)
+						sl.FreqHz = hz
+					}
+				}
+			}
+		}
 		prevInhibit := r.tx.Inhibit
 		if v, ok := kv["inhibit"]; ok {
 			r.tx.Inhibit = v == "1"

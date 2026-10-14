@@ -43,6 +43,8 @@ type Channel struct {
 	rxPeak    float32
 	rxGain    atomic.Uint32 // float32 bits, linear; direct path only
 	daxSetFor int           // slice index we last set dax= on
+
+	refreshQueued bool // a re-sync after pin expiry is scheduled
 }
 
 // setRXGain changes the RX gain live. ch.cfg is read without a lock by other
@@ -197,7 +199,12 @@ func (ch *Channel) clientList() []*client {
 func (ch *Channel) sync(s *flex.Snapshot) {
 	cur := computeView(s, ch.cfg.Slice)
 	ch.mu.Lock()
-	applyPins(&cur, ch.pins)
+	if applyPins(&cur, ch.pins) && !ch.refreshQueued {
+		// The radio moved while a pin hides it; push the real value once
+		// the pin has expired, even if the radio sends nothing more.
+		ch.refreshQueued = true
+		time.AfterFunc(pinHold+100*time.Millisecond, ch.refresh)
+	}
 	old := ch.last
 	ch.last = cur
 	lines := diff(old, cur, false)
@@ -254,8 +261,10 @@ func (ch *Channel) ensureSliceDAX() {
 // client. The originating client always gets echo, even when nothing changed:
 // clients (WSJT-X) wait for the echo of every set they send.
 func (ch *Channel) pinAndBroadcast(origin *client, key string, val any, apply func(v *view), echo ...string) {
+	snap := ch.b.radio.Snapshot()
+	radio := computeView(&snap, ch.cfg.Slice)
 	ch.mu.Lock()
-	ch.pins[key] = pin{val: val, until: time.Now().Add(pinHold)}
+	ch.pins[key] = pin{val: val, base: pinField(&radio, key), until: time.Now().Add(pinHold)}
 	old := ch.last
 	apply(&ch.last)
 	lines := diff(old, ch.last, false)
@@ -267,15 +276,13 @@ func (ch *Channel) pinAndBroadcast(origin *client, key string, val any, apply fu
 	if len(lines) == 0 && origin != nil {
 		origin.sendText(echo...)
 	}
-	// The pin hides radio reports that differ from it. If the radio reported
-	// something else (a band change retuning the slice) and then went quiet,
-	// nothing would push the real value once the pin expires: the client
-	// stays on the old frequency until it reconnects. Re-sync after expiry.
-	time.AfterFunc(pinHold+100*time.Millisecond, ch.refresh)
 }
 
 // refresh recomputes the view from the radio, keeping live pins.
 func (ch *Channel) refresh() {
+	ch.mu.Lock()
+	ch.refreshQueued = false
+	ch.mu.Unlock()
 	s := ch.b.radio.Snapshot()
 	ch.sync(&s)
 }

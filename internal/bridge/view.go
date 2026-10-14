@@ -48,14 +48,40 @@ func computeView(s *flex.Snapshot, letter string) view {
 // pin holds an optimistic value we already echoed to clients. Until the radio
 // reports the same value (or the pin expires) the radio's older value is not
 // pushed, which avoids the stale-echo oscillation seen in other servers.
+// base is the radio's value when the pin was set: a report that differs from
+// both means the radio moved somewhere else, and the client must be told
+// once the pin expires.
 type pin struct {
 	val   any
+	base  any
 	until time.Time
 }
 
 const pinHold = 1500 * time.Millisecond
 
-func applyPins(v *view, pins map[string]pin) {
+// pinField returns the view field a pin key stands for.
+func pinField(v *view, key string) any {
+	switch key {
+	case "freq":
+		return v.Freq
+	case "mode":
+		return v.Mode
+	case "trx":
+		return v.TRX
+	case "tune":
+		return v.Tune
+	case "drive":
+		return v.Drive
+	case "tune_drive":
+		return v.TuneDrive
+	}
+	return nil
+}
+
+// applyPins overrides v with live pins. It returns true when a pin is hiding
+// a radio value that is neither the pinned value nor the value from before
+// the set.
+func applyPins(v *view, pins map[string]pin) (moved bool) {
 	now := time.Now()
 	check := func(key string, cur any, set func(any)) {
 		p, ok := pins[key]
@@ -66,6 +92,9 @@ func applyPins(v *view, pins map[string]pin) {
 			delete(pins, key)
 			return
 		}
+		if cur != p.base {
+			moved = true
+		}
 		set(p.val)
 	}
 	check("freq", v.Freq, func(x any) { v.Freq = x.(int64) })
@@ -74,6 +103,7 @@ func applyPins(v *view, pins map[string]pin) {
 	check("tune", v.Tune, func(x any) { v.Tune = x.(bool) })
 	check("drive", v.Drive, func(x any) { v.Drive = x.(int) })
 	check("tune_drive", v.TuneDrive, func(x any) { v.TuneDrive = x.(int) })
+	return moved
 }
 
 func freqLines(f int64) []string {
