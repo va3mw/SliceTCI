@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,6 +38,10 @@ type fakeRadio struct {
 	rxStop     chan struct{}
 
 	spotIdx int // last spot index handed out
+
+	// quietTune makes "slice tune" succeed without a status echo, as when
+	// a band change in SmartSDR retunes the slice straight after.
+	quietTune atomic.Bool
 }
 
 const (
@@ -187,7 +192,7 @@ func (f *fakeRadio) serve() {
 			send("S0|interlock tx_client_handle=0x11111111 state=TRANSMITTING reason= source=SW tx_allowed=1 amplifier=")
 		case cmd == "xmit 0":
 			send("S0|interlock tx_client_handle=0x00000000 state=READY reason= source= tx_allowed=1 amplifier=")
-		case strings.HasPrefix(cmd, "slice tune 0 "):
+		case strings.HasPrefix(cmd, "slice tune 0 ") && !f.quietTune.Load():
 			slice("RF_frequency=" + strings.TrimPrefix(cmd, "slice tune 0 "))
 		case strings.HasPrefix(cmd, "transmit set "):
 			send("S0000ABCD|transmit " + strings.TrimPrefix(cmd, "transmit set "))
@@ -469,6 +474,45 @@ loop:
 	}
 	c.conn.UnderlyingConn().Close() // simulate a crash
 	radio.expect(t, "xmit 0", 3*time.Second)
+}
+
+// TestStalePinAfterBandChange: a client sets a frequency while the radio is
+// changing band, the radio ends up on the new band and goes quiet. Once the
+// pin expires the client must be told the radio's real frequency; before
+// 0.5.1 it stayed on the old band until it reconnected.
+func TestStalePinAfterBandChange(t *testing.T) {
+	dir := t.TempDir()
+	radio := newFakeRadio(t)
+	flex.APIPort = radio.port()
+
+	const tciPort = 50953
+	cfg := config.LoadFrom(filepath.Join(dir, "config.json"))
+	cfg.Update(func(c *config.Config) {
+		c.Channels[0].Port = tciPort
+		c.AutoConnect = false
+	})
+	l := logx.New(dir)
+	defer l.Close()
+	l.SetTraffic(true)
+	l.OnEntry(func(e logx.Entry) { t.Logf("%s %-5s %-9s %s", e.Time, e.Level, e.Source, e.Msg) })
+	b := New(l, cfg, nil)
+	b.Start()
+	defer b.Shutdown()
+	if err := b.Connect("", "127.0.0.1"); err != nil {
+		t.Fatal(err)
+	}
+	radio.expect(t, "client bind client_id=AAAA-BBBB", 3*time.Second)
+	time.Sleep(200 * time.Millisecond)
+
+	c := dialTCI(t, "127.0.0.1", tciPort)
+	c.expect(t, "ready;", 3*time.Second)
+
+	radio.quietTune.Store(true)
+	c.send("VFO:0,0,14140000;")
+	c.expect(t, "vfo:0,0,14140000;", time.Second)
+	radio.expect(t, "slice tune 0 14.140000", time.Second)
+	radio.push("S0000ABCD|slice 0 RF_frequency=21.074000")
+	c.expect(t, "vfo:0,0,21074000;", 3*time.Second)
 }
 
 // TestDirectAudio checks the no-DAX path: RX audio arrives as VITA-49 from

@@ -329,7 +329,7 @@ func (c *client) dispatch(cmd tci.Command) {
 			if a[1] != "0" {
 				ch.lg.Debug("#%d VFO B set not supported (split not mapped yet); echoing VFO A", c.id)
 			} else if idx := needSlice(); idx >= 0 {
-				b.radio.Tune(idx, hz)
+				b.radio.Tune(idx, hz, b.resyncOnError(ch))
 				ch.pinAndBroadcast(c, "freq", hz, func(v *view) { v.Freq = hz }, freqLines(hz)...)
 				return
 			}
@@ -343,7 +343,7 @@ func (c *client) dispatch(cmd tci.Command) {
 			if hz, err := strconv.ParseInt(a[1], 10, 64); err == nil && hz > 0 {
 				if idx := needSlice(); idx >= 0 {
 					if hz != v.Freq {
-						b.radio.Tune(idx, hz)
+						b.radio.Tune(idx, hz, b.resyncOnError(ch))
 					}
 					ch.pinAndBroadcast(c, "freq", hz, func(v *view) { v.Freq = hz }, freqLines(hz)...)
 					return

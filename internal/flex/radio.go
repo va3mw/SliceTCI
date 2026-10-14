@@ -706,8 +706,8 @@ func (r *Radio) Snapshot() Snapshot {
 
 // ---- convenience commands ----
 
-func (r *Radio) Tune(slice int, hz int64) {
-	r.Command(fmt.Sprintf("slice tune %d %.6f", slice, float64(hz)/1e6), nil)
+func (r *Radio) Tune(slice int, hz int64, cb func(code uint32, msg string)) {
+	r.Command(fmt.Sprintf("slice tune %d %.6f", slice, float64(hz)/1e6), cb)
 }
 func (r *Radio) SetMode(slice int, mode string) {
 	r.Command(fmt.Sprintf("slice set %d mode=%s", slice, mode), nil)

@@ -267,6 +267,17 @@ func (ch *Channel) pinAndBroadcast(origin *client, key string, val any, apply fu
 	if len(lines) == 0 && origin != nil {
 		origin.sendText(echo...)
 	}
+	// The pin hides radio reports that differ from it. If the radio reported
+	// something else (a band change retuning the slice) and then went quiet,
+	// nothing would push the real value once the pin expires: the client
+	// stays on the old frequency until it reconnects. Re-sync after expiry.
+	time.AfterFunc(pinHold+100*time.Millisecond, ch.refresh)
+}
+
+// refresh recomputes the view from the radio, keeping live pins.
+func (ch *Channel) refresh() {
+	s := ch.b.radio.Snapshot()
+	ch.sync(&s)
 }
 
 // broadcast sends lines to every client on this channel.
