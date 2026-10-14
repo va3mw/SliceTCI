@@ -29,7 +29,14 @@ Log4OM ──ws://127.0.0.1:50001──┘   per slice)         └── UDP  �
 
    ![WSJT-X Audio settings for FlexTCI](TCI-Audio.png)
 
-**Known WSJT-X issue (seen in WSJT-X improved 3.0.0 and 3.0.2):** if the slice is not already on WSJT-X's start-up frequency when WSJT-X is launched, WSJT-X shows **Rig Control Error** with the detail *TCI audio cannot be started as frequency is OOB*. WSJT-X does not send a frequency command at start-up, so FlexTCI cannot correct this. Either tune the slice to WSJT-X's frequency before starting WSJT-X, or after the error open **Settings** and close it again with **OK**; WSJT-X then reconnects and works normally.
+**Known WSJT-X issue (seen in WSJT-X improved 3.0.0 and 3.0.2):** at start-up WSJT-X may show **Rig Control Error**, with the detail *TCI audio cannot be started as frequency is OOB*. It happens even when the slice is on a normal frequency.
+
+The cause is a timing race inside WSJT-X improved:
+- After opening the TCI connection, WSJT-X waits a fixed 2 s, plus 0.5 s for audio, before it passes the radio's frequency to its main window (`Transceiver/TCITransceiver.cpp`). FlexTCI sends the frequency the moment WSJT-X connects, but no TCI message ends that wait early.
+- Meanwhile WSJT-X checks its band box on a 5 s start-up timer and again when Monitor turns on (`widgets/mainwindow.cpp`). If no frequency has arrived yet, the band box reads "OOB" and the check fails.
+- The first failure triggers a silent retry. The retry does not reconnect, so the second check fails too and shows the dialog.
+
+FlexTCI cannot fix this from the server side. To recover, open WSJT-X **Settings** and close it with **OK**. WSJT-X reconnects, the frequency is known by then, and it works normally.
 
 For more slices, run one WSJT-X instance per channel (`wsjtx --rig-name=SliceB`) and point each at its own port (50002, 50003, …).
 
