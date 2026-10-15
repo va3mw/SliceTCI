@@ -49,11 +49,12 @@ type Channel struct {
 
 // setRXGain changes the RX gain live. ch.cfg is read without a lock by other
 // goroutines and is never modified after creation; the gain lives only in
-// the atomic.
+// the atomic. Called repeatedly while the Edit slider is dragged, so it logs
+// at debug level; saving the channel logs the final value.
 func (ch *Channel) setRXGain(db int) {
 	g := math.Float32bits(dbToGain(float64(db)))
 	if ch.rxGain.Swap(g) != g {
-		ch.lg.Info("RX gain %d dB", db)
+		ch.lg.Debug("RX gain %d dB", db)
 	}
 }
 

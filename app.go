@@ -103,6 +103,16 @@ func (a *App) UpdateChannel(i int, ch config.Channel) error {
 	return nil
 }
 
+// PreviewRXGain sets channel i's RX gain live while the Edit dialog's slider
+// moves. Nothing is saved until UpdateChannel.
+func (a *App) PreviewRXGain(i, db int) error {
+	if db < config.MinRXGainDB || db > config.MaxRXGainDB {
+		return fmt.Errorf("RX gain must be %d to %+d dB", config.MinRXGainDB, config.MaxRXGainDB)
+	}
+	a.bridge.PreviewRXGain(i, db)
+	return nil
+}
+
 func (a *App) ResetChannel(i int) error {
 	return a.UpdateChannel(i, config.DefaultChannel(i))
 }

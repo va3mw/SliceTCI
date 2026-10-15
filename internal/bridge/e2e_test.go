@@ -599,6 +599,26 @@ func TestDirectAudio(t *testing.T) {
 		}
 	}
 
+	// The Edit dialog's slider previews a gain without saving it.
+	b.PreviewRXGain(0, 0)
+	for len(c.rx) > 0 {
+		<-c.rx
+	}
+	deadline = time.After(3 * time.Second)
+	for good = 0; good < 3; {
+		select {
+		case s := <-c.rx:
+			if v := s[len(s)-1]; v > 0.24 && v < 0.26 { // back to 0 dB
+				good++
+			}
+		case <-deadline:
+			t.Fatalf("previewed RX gain not applied (%d good frames)", good)
+		}
+	}
+	if g := b.cfg.Get().Channels[0].RXGain(); g != -20 {
+		t.Fatalf("preview changed the saved gain to %d dB", g)
+	}
+
 	// The dax_tx stream is prepared at connect, so keying must be fast.
 	if !radio.sent("stream create type=dax_tx") {
 		t.Fatal("dax_tx stream was not prepared at connect")

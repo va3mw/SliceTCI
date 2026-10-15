@@ -326,9 +326,11 @@ function onStatus(s) {
 }
 
 // ---------- edit dialog ----------
+let savedGain = null; // the channel's saved RX gain while the Edit dialog previews another
 function openEdit(i) {
   editing = i;
   const c = status.config.channels[i];
+  savedGain = gainOf(c);
   $("editTitle").textContent = `Edit TCI-${c.slice}`;
   $("eSlice").value = c.slice; $("ePort").value = c.port; $("eDax").value = c.dax;
   $("eGain").value = gainOf(c); $("eGainVal").textContent = gainOf(c) + " dB";
@@ -336,8 +338,17 @@ function openEdit(i) {
   open("editDlg");
 }
 $("ePort").oninput = () => $("ePortHint").textContent = $("ePort").value;
-$("eGain").oninput = () => $("eGainVal").textContent = $("eGain").value + " dB";
-$("eCancel").onclick = () => close("editDlg");
+// The slider is heard live; OK keeps it, Cancel (or Escape) goes back.
+$("eGain").oninput = () => {
+  $("eGainVal").textContent = $("eGain").value + " dB";
+  api().PreviewRXGain(editing, +$("eGain").value).catch(() => {});
+};
+function cancelEdit() {
+  if (!isOpen("editDlg")) return;
+  if (savedGain !== null && +$("eGain").value !== savedGain) api().PreviewRXGain(editing, savedGain).catch(() => {});
+  close("editDlg");
+}
+$("eCancel").onclick = cancelEdit;
 $("eReset").onclick = async () => {
   await call("ResetChannel", editing).catch(() => {});
   onStatus(await call("GetStatus")); openEdit(editing);
@@ -486,7 +497,7 @@ document.addEventListener("keydown", e => {
     const r = document.createRange(); r.selectNodeContents($("log"));
     const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
   }
-  if (e.key === "Escape") ["editDlg", "setDlg"].forEach(close);
+  if (e.key === "Escape") { cancelEdit(); close("setDlg"); }
 });
 
 // ---------- main buttons ----------

@@ -190,6 +190,21 @@ func (b *Bridge) ApplyChannels() {
 	b.notifyUI()
 }
 
+// PreviewRXGain applies an RX gain to channel i at once without saving it,
+// so the Edit dialog's slider is heard live. OK saves the value; Cancel
+// previews the saved one again.
+func (b *Bridge) PreviewRXGain(i, db int) {
+	b.chMu.Lock()
+	var ch *Channel
+	if i >= 0 && i < len(b.channels) {
+		ch = b.channels[i]
+	}
+	b.chMu.Unlock()
+	if ch != nil {
+		ch.setRXGain(db)
+	}
+}
+
 func (b *Bridge) channelList() []*Channel {
 	b.chMu.Lock()
 	defer b.chMu.Unlock()
