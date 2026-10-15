@@ -36,6 +36,17 @@ type txOwner struct {
 	restoreDAX  bool
 	chronos     int // TX_CHRONO requests sent this session
 	blocks      int // TX audio blocks received this session
+
+	// TX audio health, reported when the transmission ends.
+	chronoSent    []time.Time   // send times of unanswered TX_CHRONO requests, oldest first
+	replyMax      time.Duration // slowest client answer to a TX_CHRONO
+	replyEst      time.Duration // recent answer time: jumps up, decays slowly; sets how far ahead to ask
+	replySum      time.Duration
+	replies       int
+	underruns     int  // times the FIFO ran dry after audio had started
+	silentFrames  int  // 48 kHz frames of silence those underruns sent
+	inUnderrun    bool // the last pull was short
+	minFifoFrames int  // lowest FIFO level after audio started; -1 until then
 }
 
 type Bridge struct {
@@ -301,7 +312,7 @@ func (b *Bridge) requestTX(c *client, tciAudio, tune bool) error {
 	now := time.Now()
 	o := b.tx
 	if o == nil {
-		o = &txOwner{c: c, since: now}
+		o = &txOwner{c: c, since: now, minFifoFrames: -1}
 		b.tx = o
 	}
 	o.tciAudio, o.tune = tciAudio, tune
@@ -376,7 +387,8 @@ func dbToGain(db float64) float32 { return float32(math.Pow(10, db/20)) }
 // pullTX feeds the TX audio sink: FIFO audio with the TX gain applied, and
 // the peak recorded for the TX meter.
 func (b *Bridge) pullTX(out []float32) {
-	b.fifo.Read(out)
+	got := b.fifo.Read(out)
+	b.noteFifo(len(out)/2-got, b.fifo.Frames())
 	var db int
 	b.cfg.Read(func(c *config.Config) { db = c.TXGainDB })
 	g := dbToGain(float64(db))
@@ -397,6 +409,48 @@ func (b *Bridge) pullTX(out []float32) {
 			return
 		}
 	}
+}
+
+// noteFifo records TX audio health after a pull that came up short frames
+// short, leaving left frames in the FIFO. Before the client's first audio
+// block a short pull is expected and not counted.
+func (b *Bridge) noteFifo(short, left int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	o := b.tx
+	if o == nil || !o.tciAudio || o.blocks == 0 {
+		return
+	}
+	if o.minFifoFrames < 0 || left < o.minFifoFrames {
+		o.minFifoFrames = left
+	}
+	if short <= 0 {
+		o.inUnderrun = false
+		return
+	}
+	if !o.inUnderrun {
+		o.underruns++
+		o.inUnderrun = true
+	}
+	o.silentFrames += short
+}
+
+// txHealth summarises TX audio health for the unkey log line.
+func (o *txOwner) txHealth() string {
+	ms := func(frames int) int { return frames * 1000 / audio.Rate }
+	s := fmt.Sprintf(", %d TX_CHRONO sent, %d audio blocks received", o.chronos, o.blocks)
+	if o.replies > 0 {
+		s += fmt.Sprintf(", client answers avg %d ms max %d ms", (o.replySum / time.Duration(o.replies)).Milliseconds(), o.replyMax.Milliseconds())
+	}
+	if o.minFifoFrames >= 0 {
+		s += fmt.Sprintf(", min buffer %d ms", ms(o.minFifoFrames))
+	}
+	if o.underruns > 0 {
+		s += fmt.Sprintf(", %d underruns (%d ms of silence sent)", o.underruns, ms(o.silentFrames))
+	} else {
+		s += ", no underruns"
+	}
+	return s
 }
 
 // releaseTX unkeys if c is the current owner.
@@ -425,7 +479,9 @@ func (b *Bridge) releaseTX(c *client, reason string) {
 	}
 	stats := ""
 	if o.tciAudio {
-		stats = fmt.Sprintf(", %d TX_CHRONO sent, %d audio blocks received", o.chronos, o.blocks)
+		b.mu.Lock() // pullTX may still be updating o
+		stats = o.txHealth()
+		b.mu.Unlock()
 	}
 	b.lg.Info("unkeyed Slice %s (client #%d): %s, keyed %.1f s%s", c.ch.cfg.Slice, c.id, reason, time.Since(o.since).Seconds(), stats)
 	c.ch.pinAndBroadcast(nil, "trx", false)
@@ -472,6 +528,16 @@ func (b *Bridge) txAudio(c *client, h tci.Header, s []float32) {
 	if b.tx == o {
 		o.blocks++
 		o.lastAudio = time.Now()
+		if len(o.chronoSent) > 0 {
+			d := o.lastAudio.Sub(o.chronoSent[0])
+			o.chronoSent = o.chronoSent[1:]
+			o.replies++
+			o.replySum += d
+			if d > o.replyMax {
+				o.replyMax = d
+			}
+			o.replyEst = max(d, o.replyEst*99/100)
+		}
 		o.outstanding -= len(st) / 2
 		if o.outstanding < 0 {
 			o.outstanding = 0
@@ -479,6 +545,10 @@ func (b *Bridge) txAudio(c *client, h tci.Header, s []float32) {
 	}
 	b.mu.Unlock()
 }
+
+// maxReplyAllowance caps how much client answer time the TX_CHRONO pacing
+// covers, so one stalled answer cannot queue seconds of audio.
+const maxReplyAllowance = 250 * time.Millisecond
 
 // txLoop paces TX_CHRONO requests from the TX FIFO level and enforces the
 // safety unkey when a transmitting client stops sending audio.
@@ -533,12 +603,24 @@ func (b *Bridge) txLoop() {
 		// Forget requests the client never answered so we ask again.
 		if o.outstanding > 0 && time.Since(o.lastChrono) > 250*time.Millisecond && time.Since(o.lastAudio) > 250*time.Millisecond {
 			o.outstanding = 0
+			o.chronoSent = nil
 		}
 		c := o.c
 		level := b.fifo.Frames() + o.outstanding
+		// The oldest unanswered request's wait is a lower bound on the
+		// answer time, which covers the start before any answer arrives.
+		ahead := o.replyEst
+		if len(o.chronoSent) > 0 {
+			ahead = max(ahead, time.Since(o.chronoSent[0]))
+		}
+		ahead = min(ahead, maxReplyAllowance)
 		b.mu.Unlock()
 
-		target := c.txBufferMs() * audio.Rate / 1000
+		// Keep the client's buffering target of audio actually queued.
+		// Requested audio counts towards the level, so also keep enough on
+		// order to cover the client's answer time; otherwise a client that
+		// answers slower than the target starves the radio.
+		target := c.txBufferMs()*audio.Rate/1000 + int(ahead.Seconds()*audio.Rate)
 		if level >= target {
 			continue
 		}
@@ -551,6 +633,7 @@ func (b *Bridge) txLoop() {
 			o.chronos++
 			o.outstanding += f48
 			o.lastChrono = time.Now()
+			o.chronoSent = append(o.chronoSent, o.lastChrono)
 		}
 		b.mu.Unlock()
 	}

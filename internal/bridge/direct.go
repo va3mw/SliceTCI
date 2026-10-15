@@ -193,6 +193,7 @@ func (d *directTX) start(pull func([]float32)) stopper {
 			}
 			due := int(time.Since(start).Seconds()*float64(rate)) - sent
 			if due > rate/10 { // fell behind (e.g. a stall): resync instead of bursting
+				d.lg.Warn("DAX TX fell %d ms behind; skipped ahead (TX audio has a gap)", due*1000/rate)
 				sent += due - vita.TXFrames
 				due = vita.TXFrames
 			}
