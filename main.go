@@ -19,7 +19,7 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-const version = "0.5.4"
+const version = "0.5.5"
 
 // waitPIDFlag is passed to a restarted FlexTCI (after install or update) so
 // it waits for the previous instance to exit before starting.
