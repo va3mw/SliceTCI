@@ -1,4 +1,4 @@
-// Package bridge connects TCI channels to the radio and the DAX audio devices,
+// Package bridge connects TCI channels to the radio's slices and DAX streams,
 // and owns transmit arbitration and the safety unkey.
 package bridge
 
@@ -21,9 +21,10 @@ import (
 type stopper interface{ Stop() }
 
 // txOwner is the single TCI client currently keying the transmitter.
-// Lock order: Bridge.mu may be taken before client.mu, never after
-// Channel.mu is released into bridge calls (bridge never calls a Channel
-// while holding Bridge.mu).
+//
+// Lock order: Bridge.mu, then client.mu. Channel.mu is never held while
+// calling into the Bridge, and the Bridge never calls a Channel while
+// holding Bridge.mu.
 type txOwner struct {
 	c           *client
 	tciAudio    bool
@@ -129,22 +130,30 @@ func (b *Bridge) Connect(serial, ip string) error {
 	if ip == "" {
 		return errors.New("no radio selected")
 	}
-	b.cfg.Update(func(c *config.Config) { c.RadioSerial, c.RadioIP, c.AutoConnect = serial, ip, true })
+	b.saveConfig(func(c *config.Config) { c.RadioSerial, c.RadioIP, c.AutoConnect = serial, ip, true })
 	b.radio.Connect(ip, model, b.cfg.Get().Station)
 	b.notifyUI()
 	return nil
 }
 
+// saveConfig applies f to the settings and logs a failed save. The change
+// takes effect either way.
+func (b *Bridge) saveConfig(f func(c *config.Config)) {
+	if err := b.cfg.Update(f); err != nil {
+		b.lg.Error("%v", err)
+	}
+}
+
 func (b *Bridge) Disconnect() {
 	b.releaseAll("radio disconnect requested")
-	b.cfg.Update(func(c *config.Config) { c.AutoConnect = false })
+	b.saveConfig(func(c *config.Config) { c.AutoConnect = false })
 	b.radio.Disconnect()
 	b.notifyUI()
 }
 
 func (b *Bridge) SelectStation(name string) {
 	b.releaseAll("station changed")
-	b.cfg.Update(func(c *config.Config) { c.Station = name })
+	b.saveConfig(func(c *config.Config) { c.Station = name })
 	b.radio.SetStation(name)
 }
 
@@ -219,7 +228,7 @@ func (b *Bridge) onRadioUpdate() {
 }
 
 // resyncOnError returns a reply callback that restores the real state on failure.
-func (b *Bridge) resyncOnError(ch *Channel) func(uint32, string) {
+func (b *Bridge) resyncOnError(ch *Channel) flex.ReplyFunc {
 	return func(code uint32, _ string) {
 		if code != 0 {
 			ch.resync()
@@ -301,8 +310,8 @@ func (b *Bridge) requestTX(c *client, tciAudio, tune bool) error {
 	}
 	b.mu.Unlock()
 
-	// Open the TX audio sink outside the lock: it may talk to the radio or
-	// a sound device, and nothing else may wait on b.mu meanwhile.
+	// Start the TX audio sender outside the lock: nothing may wait on b.mu
+	// while it is created.
 	if openRender {
 		r := b.newRender(b.pullTX)
 		b.mu.Lock()
@@ -321,7 +330,7 @@ func (b *Bridge) requestTX(c *client, tciAudio, tune bool) error {
 	}
 	if digitalMode != "" {
 		b.lg.Warn("Slice %s was in %s while client #%d transmits TCI audio: switching it to %s", sl.Letter, sl.Mode, c.id, digitalMode)
-		b.radio.SetMode(sl.Index, digitalMode)
+		b.radio.SetMode(sl.Index, digitalMode, nil)
 	}
 	if setDAX {
 		if tempDAX {
@@ -346,11 +355,16 @@ func (b *Bridge) requestTX(c *client, tciAudio, tune bool) error {
 	return nil
 }
 
+// dbToGain converts decibels to a linear amplitude factor.
+func dbToGain(db float64) float32 { return float32(math.Pow(10, db/20)) }
+
 // pullTX feeds the TX audio sink: FIFO audio with the TX gain applied, and
 // the peak recorded for the TX meter.
 func (b *Bridge) pullTX(out []float32) {
 	b.fifo.Read(out)
-	g := dbToGain(float64(b.cfg.Get().TXGainDB))
+	var db int
+	b.cfg.Read(func(c *config.Config) { db = c.TXGainDB })
+	g := dbToGain(float64(db))
 	var peak float32
 	for i, v := range out {
 		v *= g
@@ -399,7 +413,8 @@ func (b *Bridge) releaseTX(c *client, reason string) {
 		stats = fmt.Sprintf(", %d TX_CHRONO sent, %d audio blocks received", o.chronos, o.blocks)
 	}
 	b.lg.Info("unkeyed Slice %s (client #%d): %s, keyed %.1f s%s", c.ch.cfg.Slice, c.id, reason, time.Since(o.since).Seconds(), stats)
-	c.ch.pinAndBroadcast(nil, "trx", false, func(v *view) { v.TRX, v.Tune = false, false })
+	c.ch.pinAndBroadcast(nil, "trx", false)
+	c.ch.pinAndBroadcast(nil, "tune", false)
 	b.notifyUI()
 }
 
@@ -461,9 +476,13 @@ func (b *Bridge) txLoop() {
 			return
 		case <-t.C:
 		}
-		cfg := b.cfg.Get()
-		timeout := time.Duration(cfg.UnkeyTimeoutMs) * time.Millisecond
-		maxTX := time.Duration(cfg.MaxTXSeconds) * time.Second
+		var timeout, maxTX time.Duration
+		var maxTXSeconds int
+		b.cfg.Read(func(c *config.Config) {
+			timeout = time.Duration(c.UnkeyTimeoutMs) * time.Millisecond
+			maxTX = time.Duration(c.MaxTXSeconds) * time.Second
+			maxTXSeconds = c.MaxTXSeconds
+		})
 		b.mu.Lock()
 		o := b.tx
 		if o == nil {
@@ -474,7 +493,7 @@ func (b *Bridge) txLoop() {
 		// radio audio, TUNE), however healthy the client looks.
 		if keyed := time.Since(o.since); keyed > maxTX {
 			b.mu.Unlock()
-			b.lg.Warn("SAFETY: client #%d has transmitted for %s, over the %d s limit", o.c.id, keyed.Round(time.Second), cfg.MaxTXSeconds)
+			b.lg.Warn("SAFETY: client #%d has transmitted for %s, over the %d s limit", o.c.id, keyed.Round(time.Second), maxTXSeconds)
 			b.releaseTX(o.c, "TX time limit reached (watchdog)")
 			continue
 		}
@@ -555,11 +574,18 @@ type Status struct {
 	Config   config.Config    `json:"config"`
 }
 
-func (b *Bridge) Status() Status {
+// Status reports the bridge state for the UI. Level meters report the peak
+// since the last reset; resetMeters starts a new measuring period, and only
+// the periodic push should set it.
+func (b *Bridge) Status(resetMeters bool) Status {
 	st := Status{Radio: b.radio.Snapshot(), Radios: b.disc.List(), Config: b.cfg.Get()}
-	st.TXLevel = math.Float32frombits(b.txPeak.Swap(0))
+	if resetMeters {
+		st.TXLevel = math.Float32frombits(b.txPeak.Swap(0))
+	} else {
+		st.TXLevel = math.Float32frombits(b.txPeak.Load())
+	}
 	for _, ch := range b.channelList() {
-		st.Channels = append(st.Channels, ch.status())
+		st.Channels = append(st.Channels, ch.status(resetMeters))
 	}
 	b.mu.Lock()
 	if b.tx != nil {

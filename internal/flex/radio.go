@@ -107,7 +107,23 @@ func (s *Snapshot) SliceByLetter(letter string) (Slice, bool) {
 	return Slice{}, false
 }
 
-type replyFn func(code uint32, msg string)
+// ReplyFunc receives a command's reply code (0 = ok) and message.
+type ReplyFunc func(code uint32, msg string)
+
+// replyTimeout is how long a command waits for its reply before its callback
+// is called with codeNoReply.
+const replyTimeout = 10 * time.Second
+
+// Codes passed to a ReplyFunc when the radio never answered.
+const (
+	codeNotConnected = 0xFFFFFFFF
+	codeNoReply      = 0xFFFFFFFE
+)
+
+type pendingReply struct {
+	fn   ReplyFunc
+	sent time.Time
+}
 
 // APIPort is the radio's TCP API port (overridden only by tests).
 var APIPort = "4992"
@@ -130,7 +146,7 @@ type Radio struct {
 	nickname    string
 	callsign    string
 	seq         uint32
-	pending     map[uint32]replyFn
+	pending     map[uint32]pendingReply
 	myHandle    uint32
 	slices      map[int]*Slice
 	stations    map[uint32]*Station
@@ -142,10 +158,11 @@ type Radio struct {
 	lastRx      time.Time
 	stop        chan struct{}
 
-	udp     *net.UDPConn
-	udpPort int
-	epoch   uint64
-	streams map[uint32]*stream
+	udp      *net.UDPConn
+	udpPort  int
+	vitaAddr *net.UDPAddr // the radio's VITA-49 port, resolved once per session
+	epoch    uint64
+	streams  map[uint32]*stream
 }
 
 func NewRadio(l *logx.Logger, onUpdate func()) *Radio {
@@ -217,26 +234,27 @@ func (r *Radio) loop(ip string, stop chan struct{}) {
 }
 
 func (r *Radio) session(ip string, stop chan struct{}) error {
-	r.log.Info("connecting to radio at %s:4992", ip)
+	r.log.Info("connecting to radio at %s", net.JoinHostPort(ip, APIPort))
 	conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip, APIPort), 5*time.Second)
 	if err != nil {
 		return err
 	}
+	var radioIP net.IP
+	if a, err := net.ResolveIPAddr("ip4", ip); err == nil {
+		radioIP = a.IP
+	}
 	udp, udpPort, err := r.openUDP()
 	if err != nil {
-		r.log.Error("%v (audio direct from the radio will not work)", err)
+		r.log.Error("%v (audio from the radio will not work)", err)
 	} else {
-		var radioIP net.IP
-		if a, err := net.ResolveIPAddr("ip4", ip); err == nil {
-			radioIP = a.IP
-		}
 		go r.udpLoop(udp, radioIP)
 	}
 	r.mu.Lock()
 	r.conn = conn
 	r.udp, r.udpPort = udp, udpPort
+	r.vitaAddr = &net.UDPAddr{IP: radioIP, Port: VitaPort}
 	r.streams = map[uint32]*stream{}
-	r.pending = map[uint32]replyFn{}
+	r.pending = map[uint32]pendingReply{}
 	r.slices = map[int]*Slice{}
 	r.stations = map[uint32]*Station{}
 	r.tx, r.il = TxState{}, Interlock{TxAllowed: true}
@@ -254,7 +272,7 @@ func (r *Radio) session(ip string, stop chan struct{}) error {
 		r.mu.Lock()
 		r.connected = false
 		r.conn = nil
-		r.udp = nil
+		r.udp, r.vitaAddr = nil, nil
 		r.streams = map[uint32]*stream{}
 		r.boundHandle, r.boundName = 0, ""
 		r.mu.Unlock()
@@ -281,6 +299,7 @@ func (r *Radio) session(ip string, stop chan struct{}) error {
 					conn.Close()
 					return
 				}
+				r.expireReplies()
 				r.Command("ping", nil)
 			}
 		}
@@ -359,11 +378,11 @@ func (r *Radio) handleReply(s string) {
 		msg = parts[2]
 	}
 	r.mu.Lock()
-	cb := r.pending[uint32(seq)]
+	p, ok := r.pending[uint32(seq)]
 	delete(r.pending, uint32(seq))
 	r.mu.Unlock()
-	if cb != nil {
-		cb(uint32(code), msg)
+	if ok {
+		p.fn(uint32(code), msg)
 	}
 }
 
@@ -387,6 +406,24 @@ func (r *Radio) onInfo(code uint32, msg string) {
 	}
 }
 
+// expireReplies calls, with codeNoReply, the callbacks of commands the radio
+// has not answered within replyTimeout, so no caller waits forever and the
+// map does not grow.
+func (r *Radio) expireReplies() {
+	var late []ReplyFunc
+	r.mu.Lock()
+	for seq, p := range r.pending {
+		if time.Since(p.sent) > replyTimeout {
+			late = append(late, p.fn)
+			delete(r.pending, seq)
+		}
+	}
+	r.mu.Unlock()
+	for _, fn := range late {
+		fn(codeNoReply, "no reply from radio")
+	}
+}
+
 // ParseInfo splits an info reply: key="value",key=value,...
 func ParseInfo(s string) map[string]string {
 	m := map[string]string{}
@@ -401,7 +438,7 @@ func ParseInfo(s string) map[string]string {
 
 // Command sends an API command. cb (optional) receives the reply. Failures are
 // always logged, so callers rarely need a callback.
-func (r *Radio) Command(cmd string, cb replyFn) {
+func (r *Radio) Command(cmd string, cb ReplyFunc) {
 	r.mu.Lock()
 	conn := r.conn
 	if conn == nil {
@@ -410,14 +447,14 @@ func (r *Radio) Command(cmd string, cb replyFn) {
 			r.log.Warn("not connected, dropped command: %s", cmd)
 		}
 		if cb != nil {
-			cb(0xFFFFFFFF, "not connected")
+			cb(codeNotConnected, "not connected")
 		}
 		return
 	}
 	r.seq++
 	seq := r.seq
 	quiet := cmd == "ping"
-	r.pending[seq] = func(code uint32, msg string) {
+	r.pending[seq] = pendingReply{sent: time.Now(), fn: func(code uint32, msg string) {
 		if code != 0 {
 			r.log.Warn("command failed (0x%08X %s): %s", code, msg, cmd)
 		} else if !quiet {
@@ -426,7 +463,7 @@ func (r *Radio) Command(cmd string, cb replyFn) {
 		if cb != nil {
 			cb(code, msg)
 		}
-	}
+	}}
 	r.mu.Unlock()
 	if !quiet {
 		r.log.Traffic("-> C%d|%s", seq, cmd)
@@ -438,7 +475,8 @@ func (r *Radio) Command(cmd string, cb replyFn) {
 	}
 }
 
-// handleStatus applies a status line. Returns true if state changed.
+// handleStatus applies a status line. It returns true if the line is one
+// whose state is tracked (the caller then notifies), changed or not.
 func (r *Radio) handleStatus(body string) bool {
 	fields := strings.Fields(body)
 	if len(fields) == 0 {
@@ -721,13 +759,27 @@ func (r *Radio) Snapshot() Snapshot {
 	return s
 }
 
+// TXSliceRate returns the DAX sample rate of the bound station's TX slice,
+// or 24000 if none is known. Unlike Snapshot it copies nothing, so the TX
+// audio loop can call it every packet.
+func (r *Radio) TXSliceRate() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, sl := range r.slices {
+		if sl.TX && sl.ClientHandle == r.boundHandle && sl.SampleRate > 0 {
+			return sl.SampleRate
+		}
+	}
+	return 24000
+}
+
 // ---- convenience commands ----
 
-func (r *Radio) Tune(slice int, hz int64, cb func(code uint32, msg string)) {
+func (r *Radio) Tune(slice int, hz int64, cb ReplyFunc) {
 	r.Command(fmt.Sprintf("slice tune %d %.6f", slice, float64(hz)/1e6), cb)
 }
-func (r *Radio) SetMode(slice int, mode string) {
-	r.Command(fmt.Sprintf("slice set %d mode=%s", slice, mode), nil)
+func (r *Radio) SetMode(slice int, mode string, cb ReplyFunc) {
+	r.Command(fmt.Sprintf("slice set %d mode=%s", slice, mode), cb)
 }
 func (r *Radio) SetFilter(slice, lo, hi int) {
 	r.Command(fmt.Sprintf("filt %d %d %d", slice, lo, hi), nil)
@@ -736,10 +788,10 @@ func (r *Radio) SetSlice(slice int, kv string) {
 	r.Command(fmt.Sprintf("slice set %d %s", slice, kv), nil)
 }
 func (r *Radio) Xmit(on bool) {
-	r.Command("xmit "+b01(on), nil)
+	r.Command("xmit "+OnOff(on), nil)
 }
 func (r *Radio) TuneTX(on bool) {
-	r.Command("transmit tune "+b01(on), nil)
+	r.Command("transmit tune "+OnOff(on), nil)
 }
 func (r *Radio) SetTransmit(kv string) {
 	r.Command("transmit set "+kv, nil)
@@ -747,14 +799,15 @@ func (r *Radio) SetTransmit(kv string) {
 
 // AddSpot creates a panadapter spot from "callsign=... rx_freq=..." pairs.
 // The reply carries the new spot's index.
-func (r *Radio) AddSpot(kv string, cb func(code uint32, msg string)) {
+func (r *Radio) AddSpot(kv string, cb ReplyFunc) {
 	r.Command("spot add "+kv, cb)
 }
 func (r *Radio) RemoveSpot(index int) {
 	r.Command(fmt.Sprintf("spot remove %d", index), nil)
 }
 
-func b01(b bool) string {
+// OnOff renders a bool as the radio API's 1/0.
+func OnOff(b bool) string {
 	if b {
 		return "1"
 	}

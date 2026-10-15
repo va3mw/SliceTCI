@@ -59,23 +59,19 @@ type pin struct {
 
 const pinHold = 1500 * time.Millisecond
 
-// pinField returns the view field a pin key stands for.
-func pinField(v *view, key string) any {
-	switch key {
-	case "freq":
-		return v.Freq
-	case "mode":
-		return v.Mode
-	case "trx":
-		return v.TRX
-	case "tune":
-		return v.Tune
-	case "drive":
-		return v.Drive
-	case "tune_drive":
-		return v.TuneDrive
-	}
-	return nil
+// pinnable lists the view fields a set command can pin, by pin key. The keys
+// are the TCI command names, except "freq" (set by both VFO and DDS) and
+// "mode" (MODULATION).
+var pinnable = map[string]struct {
+	get func(v *view) any
+	set func(v *view, x any)
+}{
+	"freq":       {func(v *view) any { return v.Freq }, func(v *view, x any) { v.Freq = x.(int64) }},
+	"mode":       {func(v *view) any { return v.Mode }, func(v *view, x any) { v.Mode = x.(string) }},
+	"trx":        {func(v *view) any { return v.TRX }, func(v *view, x any) { v.TRX = x.(bool) }},
+	"tune":       {func(v *view) any { return v.Tune }, func(v *view, x any) { v.Tune = x.(bool) }},
+	"drive":      {func(v *view) any { return v.Drive }, func(v *view, x any) { v.Drive = x.(int) }},
+	"tune_drive": {func(v *view) any { return v.TuneDrive }, func(v *view, x any) { v.TuneDrive = x.(int) }},
 }
 
 // applyPins overrides v with live pins. It returns true when a pin is hiding
@@ -83,26 +79,18 @@ func pinField(v *view, key string) any {
 // the set.
 func applyPins(v *view, pins map[string]pin) (moved bool) {
 	now := time.Now()
-	check := func(key string, cur any, set func(any)) {
-		p, ok := pins[key]
-		if !ok {
-			return
-		}
+	for key, p := range pins {
+		f := pinnable[key]
+		cur := f.get(v)
 		if cur == p.val || now.After(p.until) {
 			delete(pins, key)
-			return
+			continue
 		}
 		if cur != p.base {
 			moved = true
 		}
-		set(p.val)
+		f.set(v, p.val)
 	}
-	check("freq", v.Freq, func(x any) { v.Freq = x.(int64) })
-	check("mode", v.Mode, func(x any) { v.Mode = x.(string) })
-	check("trx", v.TRX, func(x any) { v.TRX = x.(bool) })
-	check("tune", v.Tune, func(x any) { v.Tune = x.(bool) })
-	check("drive", v.Drive, func(x any) { v.Drive = x.(int) })
-	check("tune_drive", v.TuneDrive, func(x any) { v.TuneDrive = x.(int) })
 	return moved
 }
 

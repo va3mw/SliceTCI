@@ -159,12 +159,12 @@ func (r *Radio) StreamOwnsTX(id uint32) bool {
 // SendVITA sends a packet to the radio's VITA port.
 func (r *Radio) SendVITA(b []byte) error {
 	r.mu.Lock()
-	c, ip := r.udp, r.ip
+	c, addr := r.udp, r.vitaAddr
 	r.mu.Unlock()
-	if c == nil {
+	if c == nil || addr == nil || addr.IP == nil {
 		return errors.New("audio socket not open")
 	}
-	_, err := c.WriteToUDP(b, &net.UDPAddr{IP: net.ParseIP(ip), Port: VitaPort})
+	_, err := c.WriteToUDP(b, addr)
 	return err
 }
 

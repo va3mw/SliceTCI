@@ -23,7 +23,7 @@ import (
 )
 
 // Channel is one TCI listener (one port) bound to one slice letter and one
-// DAX RX audio device.
+// DAX channel.
 type Channel struct {
 	b   *Bridge
 	idx int
@@ -41,7 +41,7 @@ type Channel struct {
 	capture   stopper
 	listenErr string
 	rxPeak    float32
-	rxGain    atomic.Uint32 // float32 bits, linear; direct path only
+	rxGain    atomic.Uint32 // float32 bits, linear
 	daxSetFor int           // slice index we last set dax= on
 
 	refreshQueued bool // a re-sync after pin expiry is scheduled
@@ -257,16 +257,18 @@ func (ch *Channel) ensureSliceDAX() {
 	ch.b.radio.SetSlice(sl.Index, fmt.Sprintf("dax=%d", ch.cfg.DAX))
 }
 
-// pinAndBroadcast records an optimistic value and pushes any change to every
+// pinAndBroadcast sets a pinnable view field (see pinnable) to val, holds it
+// against older radio reports, and pushes any change to every
 // client. The originating client always gets echo, even when nothing changed:
 // clients (WSJT-X) wait for the echo of every set they send.
-func (ch *Channel) pinAndBroadcast(origin *client, key string, val any, apply func(v *view), echo ...string) {
+func (ch *Channel) pinAndBroadcast(origin *client, key string, val any, echo ...string) {
+	f := pinnable[key]
 	snap := ch.b.radio.Snapshot()
 	radio := computeView(&snap, ch.cfg.Slice)
 	ch.mu.Lock()
-	ch.pins[key] = pin{val: val, base: pinField(&radio, key), until: time.Now().Add(pinHold)}
+	ch.pins[key] = pin{val: val, base: f.get(&radio), until: time.Now().Add(pinHold)}
 	old := ch.last
-	apply(&ch.last)
+	f.set(&ch.last, val)
 	lines := diff(old, ch.last, false)
 	cl := ch.clientList()
 	ch.mu.Unlock()
@@ -377,7 +379,7 @@ type ChannelStatus struct {
 	Clients   []ClientStatus `json:"clients"`
 }
 
-func (ch *Channel) status() ChannelStatus {
+func (ch *Channel) status(resetMeters bool) ChannelStatus {
 	ch.mu.Lock()
 	defer ch.mu.Unlock()
 	st := ChannelStatus{
@@ -386,7 +388,9 @@ func (ch *Channel) status() ChannelStatus {
 		Present: ch.last.Present, FreqHz: ch.last.Freq, Mode: ch.last.Mode, TRX: ch.last.TRX || ch.last.Tune,
 		TXEnable: ch.last.TXEnable, RXLevel: ch.rxPeak, Audio: ch.capture != nil,
 	}
-	ch.rxPeak = 0
+	if resetMeters {
+		ch.rxPeak = 0
+	}
 	for _, c := range ch.clientList() {
 		st.Clients = append(st.Clients, c.status())
 	}

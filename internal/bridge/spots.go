@@ -6,12 +6,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/va3mw/FlexTCI/internal/config"
 	"github.com/va3mw/FlexTCI/internal/tci"
 )
 
 // maxSpots bounds the spots tracked at once: callsigns come from the client.
 const maxSpots = 2000
+
+// spotLifetimeSeconds is how long a spot added over TCI stays on the
+// panadapter. TCI has no expiry of its own, so without this spots from a
+// client that never deletes them would pile up.
+const spotLifetimeSeconds = 900
 
 // spot is a panadapter spot a TCI client asked for. Spots are tracked by
 // callsign so they can be removed by index later; only tracked spots are ever
@@ -84,13 +88,13 @@ func (b *Bridge) addSpot(c *client, a []string) {
 			cmd += " comment=" + text
 		}
 	}
-	cmd += fmt.Sprintf(" source=FlexTCI lifetime_seconds=%d", config.SpotLifetimeSeconds)
+	cmd += fmt.Sprintf(" source=FlexTCI lifetime_seconds=%d", spotLifetimeSeconds)
 
 	now := time.Now()
 	epoch := b.radio.Epoch()
 	// The radio expires the spot by itself; keep ours a little longer so a
 	// late click is still recognised.
-	sp := &spot{index: -1, hz: hz, epoch: epoch, expires: now.Add((config.SpotLifetimeSeconds + 60) * time.Second)}
+	sp := &spot{index: -1, hz: hz, epoch: epoch, expires: now.Add((spotLifetimeSeconds + 60) * time.Second)}
 	b.spotMu.Lock()
 	for k, s := range b.spots {
 		if s.epoch != epoch || now.After(s.expires) {

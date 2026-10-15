@@ -292,30 +292,44 @@ func (c *tciClient) expect(t *testing.T, want string, within time.Duration) {
 	}
 }
 
-func TestEndToEnd(t *testing.T) {
+// newTestBridge makes a bridge (not started) for a new fake radio, with
+// channel 0 on tciPort. edit, if not nil, adjusts the config first.
+func newTestBridge(t *testing.T, tciPort int, edit func(c *config.Config)) (*fakeRadio, *Bridge) {
+	t.Helper()
 	dir := t.TempDir()
 	radio := newFakeRadio(t)
 	flex.APIPort = radio.port()
-
-	const tciPort = 50951
 	cfg := config.LoadFrom(filepath.Join(dir, "config.json"))
 	cfg.Update(func(c *config.Config) {
 		c.Channels[0].Port = tciPort
-		c.UnkeyTimeoutMs = 800
 		c.AutoConnect = false
+		if edit != nil {
+			edit(c)
+		}
 	})
 	l := logx.New(dir)
-	defer l.Close()
+	t.Cleanup(l.Close)
 	l.SetTraffic(true)
 	l.OnEntry(func(e logx.Entry) { t.Logf("%s %-5s %-9s %s", e.Time, e.Level, e.Source, e.Msg) })
-	b := New(l, cfg, nil)
-	b.newRender = func(pull func([]float32)) stopper { return startFakeRender(pull) }
+	return radio, New(l, cfg, nil)
+}
+
+// startTestBridge starts b, connects it to radio and waits until it is bound.
+func startTestBridge(t *testing.T, radio *fakeRadio, b *Bridge) {
+	t.Helper()
 	b.Start()
-	defer b.Shutdown()
+	t.Cleanup(b.Shutdown)
 	if err := b.Connect("", "127.0.0.1"); err != nil {
 		t.Fatal(err)
 	}
 	radio.expect(t, "client bind client_id=AAAA-BBBB", 3*time.Second)
+}
+
+func TestEndToEnd(t *testing.T) {
+	const tciPort = 50951
+	radio, b := newTestBridge(t, tciPort, func(c *config.Config) { c.UnkeyTimeoutMs = 800 })
+	b.newRender = func(pull func([]float32)) stopper { return startFakeRender(pull) }
+	startTestBridge(t, radio, b)
 	time.Sleep(200 * time.Millisecond)
 
 	// Init burst reflects the slice.
@@ -481,27 +495,9 @@ loop:
 // pin expires the client must be told the radio's real frequency; before
 // 0.5.1 it stayed on the old band until it reconnected.
 func TestStalePinAfterBandChange(t *testing.T) {
-	dir := t.TempDir()
-	radio := newFakeRadio(t)
-	flex.APIPort = radio.port()
-
 	const tciPort = 50953
-	cfg := config.LoadFrom(filepath.Join(dir, "config.json"))
-	cfg.Update(func(c *config.Config) {
-		c.Channels[0].Port = tciPort
-		c.AutoConnect = false
-	})
-	l := logx.New(dir)
-	defer l.Close()
-	l.SetTraffic(true)
-	l.OnEntry(func(e logx.Entry) { t.Logf("%s %-5s %-9s %s", e.Time, e.Level, e.Source, e.Msg) })
-	b := New(l, cfg, nil)
-	b.Start()
-	defer b.Shutdown()
-	if err := b.Connect("", "127.0.0.1"); err != nil {
-		t.Fatal(err)
-	}
-	radio.expect(t, "client bind client_id=AAAA-BBBB", 3*time.Second)
+	radio, b := newTestBridge(t, tciPort, nil)
+	startTestBridge(t, radio, b)
 	time.Sleep(200 * time.Millisecond)
 
 	c := dialTCI(t, "127.0.0.1", tciPort)
@@ -552,28 +548,13 @@ func (c *tciClient) expectNone(t *testing.T, prefix string, d time.Duration) {
 // the radio and reaches the TCI client; TCI TX audio leaves as VITA-49
 // dax_tx packets at the slice rate.
 func TestDirectAudio(t *testing.T) {
-	dir := t.TempDir()
-	radio := newFakeRadio(t)
-	flex.APIPort = radio.port()
 	const tciPort = 50952
-	cfg := config.LoadFrom(filepath.Join(dir, "config.json"))
-	cfg.Update(func(c *config.Config) {
-		c.Channels[0].Port = tciPort
+	radio, b := newTestBridge(t, tciPort, func(c *config.Config) {
 		zero := 0
 		c.Channels[0].RXGainDB = &zero
 		c.TXGainDB = 0 // the TX check below expects the client's level unchanged
-		c.AutoConnect = false
 	})
-	l := logx.New(dir)
-	defer l.Close()
-	l.OnEntry(func(e logx.Entry) { t.Logf("%s %-5s %-9s %s", e.Time, e.Level, e.Source, e.Msg) })
-	b := New(l, cfg, nil)
-	b.Start()
-	defer b.Shutdown()
-	if err := b.Connect("", "127.0.0.1"); err != nil {
-		t.Fatal(err)
-	}
-	radio.expect(t, "client bind client_id=AAAA-BBBB", 3*time.Second)
+	startTestBridge(t, radio, b)
 	if !radio.sent(fmt.Sprintf("client udpport %d", radio.clientPort)) || radio.clientPort == 0 {
 		t.Fatal("bridge never sent client udpport")
 	}
@@ -675,26 +656,9 @@ loop:
 // TestTXWatchdog: a client that keys and never unkeys (while staying
 // connected) is cut off at the max TX time.
 func TestTXWatchdog(t *testing.T) {
-	dir := t.TempDir()
-	radio := newFakeRadio(t)
-	flex.APIPort = radio.port()
-	const tciPort = 50953
-	cfg := config.LoadFrom(filepath.Join(dir, "config.json"))
-	cfg.Update(func(c *config.Config) {
-		c.Channels[0].Port = tciPort
-		c.AutoConnect = false
-		c.MaxTXSeconds = 5
-	})
-	l := logx.New(dir)
-	defer l.Close()
-	l.OnEntry(func(e logx.Entry) { t.Logf("%s %-5s %-9s %s", e.Time, e.Level, e.Source, e.Msg) })
-	b := New(l, cfg, nil)
-	b.Start()
-	defer b.Shutdown()
-	if err := b.Connect("", "127.0.0.1"); err != nil {
-		t.Fatal(err)
-	}
-	radio.expect(t, "client bind client_id=AAAA-BBBB", 3*time.Second)
+	const tciPort = 50955
+	radio, b := newTestBridge(t, tciPort, func(c *config.Config) { c.MaxTXSeconds = 5 })
+	startTestBridge(t, radio, b)
 	c := dialTCI(t, "127.0.0.1", tciPort)
 	c.expect(t, "ready;", 3*time.Second)
 

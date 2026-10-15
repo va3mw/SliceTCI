@@ -1,14 +1,11 @@
 package bridge
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/va3mw/FlexTCI/internal/config"
-	"github.com/va3mw/FlexTCI/internal/flex"
-	"github.com/va3mw/FlexTCI/internal/logx"
 )
 
 func TestSpotColor(t *testing.T) {
@@ -31,29 +28,12 @@ func TestSpotColor(t *testing.T) {
 // in SmartSDR comes back as CLICKED_ON_SPOT. The fake radio numbers spots
 // from 7.
 func TestSpots(t *testing.T) {
-	dir := t.TempDir()
-	radio := newFakeRadio(t)
-	flex.APIPort = radio.port()
 	const tciPort = 50954
-	cfg := config.LoadFrom(filepath.Join(dir, "config.json"))
-	cfg.Update(func(c *config.Config) {
-		c.Channels[0].Port = tciPort
-		c.AutoConnect = false
-	})
-	if !cfg.Get().Spots {
+	radio, b := newTestBridge(t, tciPort, nil)
+	if !b.cfg.Get().Spots {
 		t.Fatal("spots should be on by default")
 	}
-	l := logx.New(dir)
-	defer l.Close()
-	l.SetTraffic(true)
-	l.OnEntry(func(e logx.Entry) { t.Logf("%s %-5s %-9s %s", e.Time, e.Level, e.Source, e.Msg) })
-	b := New(l, cfg, nil)
-	b.Start()
-	defer b.Shutdown()
-	if err := b.Connect("", "127.0.0.1"); err != nil {
-		t.Fatal(err)
-	}
-	radio.expect(t, "client bind client_id=AAAA-BBBB", 3*time.Second)
+	startTestBridge(t, radio, b)
 	if !radio.sent("sub spot all") {
 		t.Fatal("never subscribed to spot status")
 	}
@@ -134,7 +114,7 @@ func TestSpots(t *testing.T) {
 	// Switched off: nothing goes to the radio and clicks are not reported.
 	c.send("SPOT:KEEP,CW,14002000,0,;") // index 13
 	settle()
-	cfg.Update(func(c *config.Config) { c.Spots = false })
+	b.cfg.Update(func(c *config.Config) { c.Spots = false })
 	c.send("SPOT:OFF1,CW,14003000,0,;SPOT_DELETE:KEEP;SPOT_CLEAR;")
 	settle()
 	if sentWith("callsign=OFF1") || radio.sent("spot remove 13") {
@@ -146,7 +126,7 @@ func TestSpots(t *testing.T) {
 	// Clicks that must stay silent: spots off, a cleared spot, a foreign spot.
 	radio.push("S0|spot 13 triggered")
 	settle()
-	cfg.Update(func(c *config.Config) { c.Spots = true })
+	b.cfg.Update(func(c *config.Config) { c.Spots = true })
 	radio.push("S0|spot 10 triggered")
 	radio.push("S0|spot 50 triggered")
 	settle()

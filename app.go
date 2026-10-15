@@ -51,7 +51,7 @@ func (a *App) shutdown(context.Context) {
 
 func (a *App) pushStatus() {
 	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "status", a.bridge.Status())
+		runtime.EventsEmit(a.ctx, "status", a.bridge.Status(true))
 	}
 }
 
@@ -70,7 +70,9 @@ func (a *App) logPump() {
 
 // ---- bound methods ----
 
-func (a *App) GetStatus() bridge.Status { return a.bridge.Status() }
+// GetStatus is the UI's on-demand read. It leaves the level meters alone so
+// it does not steal a peak from the next periodic push.
+func (a *App) GetStatus() bridge.Status { return a.bridge.Status(false) }
 
 func (a *App) GetLogs(since uint64) []logx.Entry { return a.log.Since(since) }
 
@@ -89,10 +91,12 @@ func (a *App) UpdateChannel(i int, ch config.Channel) error {
 	ch.Slice = strings.ToUpper(strings.TrimSpace(ch.Slice))
 	c := a.cfg.Get()
 	c.Channels[i] = ch
-	if err := validate(c); err != nil {
+	if err := c.ValidateChannels(); err != nil {
 		return err
 	}
-	a.cfg.Update(func(c *config.Config) { c.Channels[i] = ch })
+	if err := a.save(func(c *config.Config) { c.Channels[i] = ch }); err != nil {
+		return err
+	}
 	a.log.Log(logx.Info, "app", "channel %d: Slice %s, port %d, DAX %d, RX gain %d dB", i+1, ch.Slice, ch.Port, ch.DAX, ch.RXGain())
 	a.bridge.ApplyChannels()
 	return nil
@@ -128,14 +132,16 @@ func (a *App) AddChannel() error {
 	for used(func(x config.Channel) bool { return x.Port == nc.Port }) {
 		nc.Port++
 	}
-	for d := 1; d <= 8; d++ {
+	for d := 1; d <= config.MaxDAX; d++ {
 		if !used(func(x config.Channel) bool { return x.DAX == d }) {
 			nc.DAX = d
 			break
 		}
 	}
 	n := c.ChannelCount
-	a.cfg.Update(func(c *config.Config) { c.Channels[n] = nc; c.ChannelCount = n + 1 })
+	if err := a.save(func(c *config.Config) { c.Channels[n] = nc; c.ChannelCount = n + 1 }); err != nil {
+		return err
+	}
 	a.log.Log(logx.Info, "app", "added channel: Slice %s, port %d, DAX %d", nc.Slice, nc.Port, nc.DAX)
 	a.bridge.ApplyChannels()
 	return nil
@@ -151,11 +157,14 @@ func (a *App) RemoveChannel(i int) error {
 		return fmt.Errorf("bad channel %d", i)
 	}
 	removed := c.Channels[i]
-	a.cfg.Update(func(c *config.Config) {
+	err := a.save(func(c *config.Config) {
 		chs := append(append([]config.Channel{}, c.Channels[:i]...), c.Channels[i+1:]...)
 		c.Channels = append(chs, config.DefaultChannel(config.MaxChannels-1))
 		c.ChannelCount--
 	})
+	if err != nil {
+		return err
+	}
 	a.log.Log(logx.Info, "app", "removed channel: Slice %s, port %d", removed.Slice, removed.Port)
 	a.bridge.ApplyChannels()
 	return nil
@@ -164,70 +173,27 @@ func (a *App) RemoveChannel(i int) error {
 // SetTXGain changes the TX audio trim live; the next TX audio block uses it.
 // Called repeatedly while the slider is dragged, so it logs at debug level.
 func (a *App) SetTXGain(db int) error {
-	if db < -40 || db > 20 {
-		return fmt.Errorf("TX gain must be -40 to +20 dB")
+	if db < config.MinTXGainDB || db > config.MaxTXGainDB {
+		return fmt.Errorf("TX gain must be %d to %+d dB", config.MinTXGainDB, config.MaxTXGainDB)
 	}
 	if a.cfg.Get().TXGainDB == db {
 		return nil
 	}
-	a.cfg.Update(func(c *config.Config) { c.TXGainDB = db })
+	if err := a.save(func(c *config.Config) { c.TXGainDB = db }); err != nil {
+		return err
+	}
 	a.log.Log(logx.Debug, "app", "TX gain %d dB", db)
 	return nil
 }
 
-func validate(c config.Config) error {
-	ports := map[int]int{}
-	slices := map[string]int{}
-	for i := 0; i < c.ChannelCount; i++ {
-		ch := c.Channels[i]
-		if ch.Port < 1024 || ch.Port > 65535 {
-			return fmt.Errorf("channel %d: port must be 1024-65535", i+1)
-		}
-		if len(ch.Slice) != 1 || ch.Slice[0] < 'A' || ch.Slice[0] > 'H' {
-			return fmt.Errorf("channel %d: slice must be A-H", i+1)
-		}
-		if ch.DAX < 1 || ch.DAX > 8 {
-			return fmt.Errorf("channel %d: DAX channel must be 1-8", i+1)
-		}
-		if g := ch.RXGain(); g < -80 || g > 20 {
-			return fmt.Errorf("channel %d: RX gain must be -80 to +20 dB", i+1)
-		}
-		if j, ok := ports[ch.Port]; ok {
-			return fmt.Errorf("channels %d and %d both use port %d", j+1, i+1, ch.Port)
-		}
-		if j, ok := slices[ch.Slice]; ok {
-			return fmt.Errorf("channels %d and %d both use Slice %s", j+1, i+1, ch.Slice)
-		}
-		ports[ch.Port], slices[ch.Slice] = i, i
-	}
-	return nil
-}
-
-type Options struct {
-	UnkeyTimeoutMs int    `json:"unkey_timeout_ms"`
-	ProtocolName   string `json:"protocol_name"`
-	SetSliceDAX    bool   `json:"set_slice_dax"`
-	DigitalOnTX    bool   `json:"digital_on_tx"`
-	Spots          bool   `json:"spots"`
-	LogTraffic     bool   `json:"log_traffic"`
-	MaxTXSeconds   int    `json:"max_tx_seconds"`
-}
-
-func (a *App) SetOptions(o Options) error {
-	if o.UnkeyTimeoutMs < 500 || o.UnkeyTimeoutMs > 10000 {
-		return fmt.Errorf("unkey timeout must be 500-10000 ms")
-	}
+func (a *App) SetOptions(o config.Options) error {
 	o.ProtocolName = strings.TrimSpace(o.ProtocolName)
-	if o.ProtocolName == "" || strings.ContainsAny(o.ProtocolName, ":,;") {
-		return fmt.Errorf("protocol name must be non-empty and not contain : , ;")
+	if err := o.Validate(); err != nil {
+		return err
 	}
-	if o.MaxTXSeconds < 5 || o.MaxTXSeconds > 3600 {
-		return fmt.Errorf("max TX time must be 5-3600 s")
+	if err := a.save(func(c *config.Config) { c.Options = o }); err != nil {
+		return err
 	}
-	a.cfg.Update(func(c *config.Config) {
-		c.UnkeyTimeoutMs, c.ProtocolName, c.SetSliceDAX, c.LogTraffic = o.UnkeyTimeoutMs, o.ProtocolName, o.SetSliceDAX, o.LogTraffic
-		c.MaxTXSeconds, c.DigitalOnTX, c.Spots = o.MaxTXSeconds, o.DigitalOnTX, o.Spots
-	})
 	if !o.Spots {
 		if n := a.bridge.ClearSpots(); n > 0 {
 			a.log.Log(logx.Info, "app", "spots turned off: removed %d TCI spots from the radio", n)
@@ -243,5 +209,17 @@ func (a *App) SetOptions(o Options) error {
 func (a *App) ConfigDir() string { return config.Dir() }
 
 func (a *App) OpenLogFolder() {
-	exec.Command("explorer", a.log.Dir()).Start()
+	if err := exec.Command("explorer", a.log.Dir()).Start(); err != nil {
+		a.log.Log(logx.Warn, "app", "cannot open log folder %s: %v", a.log.Dir(), err)
+	}
+}
+
+// save applies f to the settings. A failed save is logged and returned so
+// the UI shows it; the change itself still takes effect.
+func (a *App) save(f func(c *config.Config)) error {
+	err := a.cfg.Update(f)
+	if err != nil {
+		a.log.Log(logx.Error, "app", "%v", err)
+	}
+	return err
 }

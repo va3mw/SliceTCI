@@ -32,10 +32,11 @@ type Discovery struct {
 	radios   map[string]*RadioInfo
 	onChange func()
 	conn     *net.UDPConn
+	quit     chan struct{}
 }
 
 func NewDiscovery(l *logx.Logger, onChange func()) *Discovery {
-	return &Discovery{log: l.Src("discovery"), radios: map[string]*RadioInfo{}, onChange: onChange}
+	return &Discovery{log: l.Src("discovery"), radios: map[string]*RadioInfo{}, onChange: onChange, quit: make(chan struct{})}
 }
 
 func (d *Discovery) Start() {
@@ -43,8 +44,14 @@ func (d *Discovery) Start() {
 	go d.expire()
 }
 
+// Stop closes the socket and ends the listen-retry and expiry goroutines.
 func (d *Discovery) Stop() {
 	d.mu.Lock()
+	select {
+	case <-d.quit:
+	default:
+		close(d.quit)
+	}
 	if d.conn != nil {
 		d.conn.Close()
 	}
@@ -64,11 +71,22 @@ func (d *Discovery) run() {
 			} else {
 				d.log.Debug("discovery listen retry failed: %v", err)
 			}
-			time.Sleep(10 * time.Second)
+			select {
+			case <-d.quit:
+				return
+			case <-time.After(10 * time.Second):
+			}
 			continue
 		}
 		conn := pc.(*net.UDPConn)
 		d.mu.Lock()
+		select {
+		case <-d.quit: // stopped while we were opening
+			d.mu.Unlock()
+			conn.Close()
+			return
+		default:
+		}
 		d.conn = conn
 		d.mu.Unlock()
 		d.log.Info("listening for radio discovery on UDP 4992 (shared)")
@@ -102,7 +120,14 @@ func (d *Discovery) update(info *RadioInfo) {
 }
 
 func (d *Discovery) expire() {
-	for range time.Tick(5 * time.Second) {
+	t := time.NewTicker(5 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-d.quit:
+			return
+		case <-t.C:
+		}
 		removed := false
 		d.mu.Lock()
 		for k, r := range d.radios {

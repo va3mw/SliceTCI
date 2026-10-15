@@ -5,6 +5,7 @@ package tci
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -55,6 +56,8 @@ func Fmt(name string, args ...any) string {
 			b.WriteString(strconv.FormatInt(v, 10))
 		case bool:
 			b.WriteString(strconv.FormatBool(v))
+		default:
+			fmt.Fprint(&b, v)
 		}
 	}
 	b.WriteByte(';')

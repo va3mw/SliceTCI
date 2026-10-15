@@ -47,7 +47,8 @@ const ringSize = 5000
 
 type Logger struct {
 	mu        sync.Mutex
-	ring      []Entry
+	ring      []Entry // circular once full; head is the oldest entry
+	head      int
 	nextID    uint64
 	file      *os.File
 	dir       string
@@ -100,11 +101,12 @@ func (l *Logger) Log(lvl Level, src, format string, args ...any) {
 		Source: src,
 		Msg:    fmt.Sprintf(format, args...),
 	}
-	if len(l.ring) == ringSize {
-		copy(l.ring, l.ring[1:])
-		l.ring = l.ring[:ringSize-1]
+	if len(l.ring) < ringSize {
+		l.ring = append(l.ring, e)
+	} else {
+		l.ring[l.head] = e
+		l.head = (l.head + 1) % ringSize
 	}
-	l.ring = append(l.ring, e)
 	l.writeFile(now, e)
 	listeners := l.listeners
 	l.mu.Unlock()
@@ -137,8 +139,8 @@ func (l *Logger) Since(id uint64) []Entry {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	out := []Entry{}
-	for _, e := range l.ring {
-		if e.ID > id {
+	for i := range l.ring {
+		if e := l.ring[(l.head+i)%len(l.ring)]; e.ID > id {
 			out = append(out, e)
 		}
 	}

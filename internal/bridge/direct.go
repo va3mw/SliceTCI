@@ -2,7 +2,6 @@ package bridge
 
 import (
 	"fmt"
-	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,16 +12,30 @@ import (
 	"github.com/va3mw/FlexTCI/internal/vita"
 )
 
-// directRX receives a slice's audio straight from the radio as a dax_rx
-// VITA-49 stream, so SmartSDR DAX and the Windows sound devices are not
-// needed. The stream is recreated after a reconnect or if the radio drops it.
-type directRX struct {
+// worker is a goroutine that runs until Stop, which waits for it to finish.
+type worker struct {
 	stop chan struct{}
 	wg   sync.WaitGroup
 }
 
-func startDirectRX(r *flex.Radio, lg *logx.Source, dax int, gain func() float32, onData func([]float32)) *directRX {
-	d := &directRX{stop: make(chan struct{})}
+func startWorker(run func(stop <-chan struct{})) *worker {
+	w := &worker{stop: make(chan struct{})}
+	w.wg.Add(1)
+	go func() {
+		defer w.wg.Done()
+		run(w.stop)
+	}()
+	return w
+}
+
+func (w *worker) Stop() {
+	close(w.stop)
+	w.wg.Wait()
+}
+
+// startDirectRX receives a slice's audio from the radio as a dax_rx VITA-49
+// stream. The stream is recreated after a reconnect or if the radio drops it.
+func startDirectRX(r *flex.Radio, lg *logx.Source, dax int, gain func() float32, onData func([]float32)) *worker {
 	var packets atomic.Uint64
 	// The handler runs on the radio's single UDP goroutine, so the
 	// resamplers need no locking.
@@ -51,9 +64,7 @@ func startDirectRX(r *flex.Radio, lg *logx.Source, dax int, gain func() float32,
 		}
 		onData(s)
 	}
-	d.wg.Add(1)
-	go func() {
-		defer d.wg.Done()
+	return startWorker(func(stop <-chan struct{}) {
 		var id uint32
 		var epoch uint64
 		var created time.Time
@@ -63,7 +74,7 @@ func startDirectRX(r *flex.Radio, lg *logx.Source, dax int, gain func() float32,
 		defer t.Stop()
 		for {
 			select {
-			case <-d.stop:
+			case <-stop:
 				if id != 0 && r.StreamAlive(id) {
 					r.RemoveStream(id)
 				}
@@ -96,13 +107,7 @@ func startDirectRX(r *flex.Radio, lg *logx.Source, dax int, gain func() float32,
 				warnedSilent = true
 			}
 		}
-	}()
-	return d
-}
-
-func (d *directRX) Stop() {
-	close(d.stop)
-	d.wg.Wait()
+	})
 }
 
 // directTX owns one dax_tx stream per radio session and paces TX audio to
@@ -120,9 +125,6 @@ func newDirectTX(r *flex.Radio, lg *logx.Source) *directTX {
 	return &directTX{r: r, lg: lg}
 }
 
-// dbToGain converts decibels to a linear amplitude factor.
-func dbToGain(db float64) float32 { return float32(math.Pow(10, db/20)) }
-
 // ensure returns a live dax_tx stream id, creating one if needed.
 func (d *directTX) ensure() (uint32, error) {
 	d.mu.Lock()
@@ -138,27 +140,6 @@ func (d *directTX) ensure() (uint32, error) {
 	return id, nil
 }
 
-// txSliceRate returns the DAX rate of the bound station's TX slice.
-func txSliceRate(r *flex.Radio) int {
-	s := r.Snapshot()
-	for _, sl := range s.Slices {
-		if sl.TX && sl.ClientHandle == s.BoundHandle && sl.SampleRate > 0 {
-			return sl.SampleRate
-		}
-	}
-	return 24000
-}
-
-type directTXSession struct {
-	stop chan struct{}
-	wg   sync.WaitGroup
-}
-
-func (s *directTXSession) Stop() {
-	close(s.stop)
-	s.wg.Wait()
-}
-
 // prepare creates the dax_tx stream ahead of the first key so keying does
 // not wait on the radio. Safe to call repeatedly.
 func (d *directTX) prepare() {
@@ -170,10 +151,7 @@ func (d *directTX) prepare() {
 // start begins sending audio pulled from pull (stereo, 48 kHz) until Stop.
 // It never blocks: stream setup happens on the session goroutine.
 func (d *directTX) start(pull func([]float32)) stopper {
-	s := &directTXSession{stop: make(chan struct{})}
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	return startWorker(func(stop <-chan struct{}) {
 		id, err := d.ensure()
 		if err != nil {
 			d.lg.Error("cannot open DAX TX stream on the radio: %v", err)
@@ -195,7 +173,7 @@ func (d *directTX) start(pull func([]float32)) stopper {
 		began := time.Now()
 		for {
 			select {
-			case <-s.stop:
+			case <-stop:
 				d.lg.Debug("DAX TX: sent %d packets", packets)
 				return
 			case <-t.C:
@@ -205,7 +183,7 @@ func (d *directTX) start(pull func([]float32)) stopper {
 					continue
 				}
 			}
-			if r := txSliceRate(d.r); r != rate || rs == nil {
+			if r := d.r.TXSliceRate(); r != rate || rs == nil {
 				rate, rs, pending = r, audio.NewResampler(audio.Rate, r, 2), nil
 				start, sent = time.Now(), 0
 			}
@@ -242,6 +220,5 @@ func (d *directTX) start(pull func([]float32)) stopper {
 				packets++
 			}
 		}
-	}()
-	return s
+	})
 }

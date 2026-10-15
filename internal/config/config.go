@@ -3,18 +3,35 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
 // MaxChannels is the hard upper bound on TCI channels (one port per slice).
 const MaxChannels = 8
 
+// Limits shared by validation (the UI) and normalize (a hand-edited file).
+const (
+	MaxDAX                = 8
+	MinRXGainDB           = -80
+	MaxRXGainDB           = 20
+	MinTXGainDB           = -40
+	MaxTXGainDB           = 20
+	MinUnkeyTimeoutMs     = 500
+	MaxUnkeyTimeoutMs     = 10000
+	DefaultUnkeyTimeoutMs = 2000
+	MinMaxTXSeconds       = 5
+	MaxMaxTXSeconds       = 3600
+	DefaultProtocolName   = "ExpertSDR3"
+)
+
 type Channel struct {
-	Slice    string `json:"slice"`                // slice letter A..H
+	Slice    string `json:"slice"`                // slice letter, A and up (one per channel)
 	Port     int    `json:"port"`                 // TCI WebSocket port
-	DAX      int    `json:"dax"`                  // DAX channel streamed from the radio (1..8)
+	DAX      int    `json:"dax"`                  // DAX channel streamed from the radio (1..MaxDAX)
 	RXGainDB *int   `json:"rx_gain_db,omitempty"` // nil = default
 }
 
@@ -24,11 +41,6 @@ const DefaultTXGainDB = -6
 // DefaultMaxTXSeconds is the TX watchdog default. FT8/FT4 overs are well
 // under a minute; five minutes still allows long RTTY/SSB overs.
 const DefaultMaxTXSeconds = 300
-
-// SpotLifetimeSeconds is how long a spot added over TCI stays on the
-// panadapter. TCI has no expiry of its own, so without this spots from a
-// client that never deletes them would pile up.
-const SpotLifetimeSeconds = 900
 
 // DefaultRXGainDB brings the radio's full-scale DAX stream down to the level
 // digital-mode apps expect (WSJT-X wants roughly 30 dB on its meter; the raw
@@ -49,36 +61,90 @@ func (c Channel) SameExceptGain(o Channel) bool {
 	return c.Slice == o.Slice && c.Port == o.Port && c.DAX == o.DAX
 }
 
+// Options are the settings edited together in the Settings dialog. Config
+// embeds them, so they stay flat in config.json and in the status JSON.
+type Options struct {
+	UnkeyTimeoutMs int    `json:"unkey_timeout_ms"`
+	MaxTXSeconds   int    `json:"max_tx_seconds"` // TX watchdog: longest single transmission
+	ProtocolName   string `json:"protocol_name"`
+	SetSliceDAX    bool   `json:"set_slice_dax"`
+	DigitalOnTX    bool   `json:"digital_on_tx"` // TCI-audio TX: USB/LSB -> DIGU/DIGL and TX DAX on
+	Spots          bool   `json:"spots"`         // TCI spots <-> panadapter spots
+	LogTraffic     bool   `json:"log_traffic"`
+}
+
+// Validate checks options from the UI.
+func (o Options) Validate() error {
+	if o.UnkeyTimeoutMs < MinUnkeyTimeoutMs || o.UnkeyTimeoutMs > MaxUnkeyTimeoutMs {
+		return fmt.Errorf("unkey timeout must be %d-%d ms", MinUnkeyTimeoutMs, MaxUnkeyTimeoutMs)
+	}
+	if o.ProtocolName == "" || strings.ContainsAny(o.ProtocolName, ":,;") {
+		return fmt.Errorf("protocol name must be non-empty and not contain : , ;")
+	}
+	if o.MaxTXSeconds < MinMaxTXSeconds || o.MaxTXSeconds > MaxMaxTXSeconds {
+		return fmt.Errorf("max TX time must be %d-%d s", MinMaxTXSeconds, MaxMaxTXSeconds)
+	}
+	return nil
+}
+
 type Config struct {
-	RadioIP        string    `json:"radio_ip"`     // last radio, or manual IP
-	RadioSerial    string    `json:"radio_serial"` // last radio picked from discovery
-	Station        string    `json:"station"`      // SmartSDR station name to bind to
-	ChannelCount   int       `json:"channel_count"`
-	Channels       []Channel `json:"channels"`
-	TXGainDB       int       `json:"tx_gain_db"` // TX audio trim
-	UnkeyTimeoutMs int       `json:"unkey_timeout_ms"`
-	MaxTXSeconds   int       `json:"max_tx_seconds"` // TX watchdog: longest single transmission
-	ProtocolName   string    `json:"protocol_name"`
-	SetSliceDAX    bool      `json:"set_slice_dax"`
-	DigitalOnTX    bool      `json:"digital_on_tx"` // TCI-audio TX: USB/LSB -> DIGU/DIGL and TX DAX on
-	Spots          bool      `json:"spots"`         // TCI spots <-> panadapter spots
-	LogTraffic     bool      `json:"log_traffic"`
-	AutoConnect    bool      `json:"auto_connect"`
+	RadioIP      string    `json:"radio_ip"`     // last radio, or manual IP
+	RadioSerial  string    `json:"radio_serial"` // last radio picked from discovery
+	Station      string    `json:"station"`      // SmartSDR station name to bind to
+	ChannelCount int       `json:"channel_count"`
+	Channels     []Channel `json:"channels"`
+	TXGainDB     int       `json:"tx_gain_db"` // TX audio trim
+	AutoConnect  bool      `json:"auto_connect"`
+	Options
 }
 
 func Default() *Config {
 	c := &Config{
-		ChannelCount:   1,
-		TXGainDB:       DefaultTXGainDB,
-		UnkeyTimeoutMs: 2000,
-		ProtocolName:   "ExpertSDR3",
-		SetSliceDAX:    true,
-		DigitalOnTX:    true,
-		Spots:          true,
-		AutoConnect:    true,
+		ChannelCount: 1,
+		TXGainDB:     DefaultTXGainDB,
+		AutoConnect:  true,
+		Options: Options{
+			UnkeyTimeoutMs: DefaultUnkeyTimeoutMs,
+			MaxTXSeconds:   DefaultMaxTXSeconds,
+			ProtocolName:   DefaultProtocolName,
+			SetSliceDAX:    true,
+			DigitalOnTX:    true,
+			Spots:          true,
+		},
 	}
 	c.normalize()
 	return c
+}
+
+// ValidateChannels checks the active channels: ranges, and no two sharing a
+// port or slice.
+func (c Config) ValidateChannels() error {
+	ports := map[int]int{}
+	slices := map[string]int{}
+	last := byte('A' + MaxChannels - 1)
+	for i := 0; i < c.ChannelCount; i++ {
+		ch := c.Channels[i]
+		if ch.Port < 1024 || ch.Port > 65535 {
+			return fmt.Errorf("channel %d: port must be 1024-65535", i+1)
+		}
+		if len(ch.Slice) != 1 || ch.Slice[0] < 'A' || ch.Slice[0] > last {
+			return fmt.Errorf("channel %d: slice must be A-%c", i+1, last)
+		}
+		if ch.DAX < 1 || ch.DAX > MaxDAX {
+			return fmt.Errorf("channel %d: DAX channel must be 1-%d", i+1, MaxDAX)
+		}
+		if g := ch.RXGain(); g < MinRXGainDB || g > MaxRXGainDB {
+			return fmt.Errorf("channel %d: RX gain must be %d to %+d dB", i+1, MinRXGainDB, MaxRXGainDB)
+		}
+		if j, ok := ports[ch.Port]; ok {
+			return fmt.Errorf("channels %d and %d both use port %d", j+1, i+1, ch.Port)
+		}
+		if j, ok := slices[ch.Slice]; ok {
+			return fmt.Errorf("channels %d and %d both use Slice %s", j+1, i+1, ch.Slice)
+		}
+		ports[ch.Port], slices[ch.Slice] = i, i
+	}
+	return nil
 }
 
 func DefaultChannel(i int) Channel {
@@ -96,14 +162,14 @@ func (c *Config) normalize() {
 	if c.ChannelCount > MaxChannels {
 		c.ChannelCount = MaxChannels
 	}
-	if c.UnkeyTimeoutMs < 500 {
-		c.UnkeyTimeoutMs = 2000
+	if c.UnkeyTimeoutMs < MinUnkeyTimeoutMs || c.UnkeyTimeoutMs > MaxUnkeyTimeoutMs {
+		c.UnkeyTimeoutMs = DefaultUnkeyTimeoutMs
 	}
-	if c.MaxTXSeconds < 5 || c.MaxTXSeconds > 3600 {
+	if c.MaxTXSeconds < MinMaxTXSeconds || c.MaxTXSeconds > MaxMaxTXSeconds {
 		c.MaxTXSeconds = DefaultMaxTXSeconds
 	}
 	if c.ProtocolName == "" {
-		c.ProtocolName = "ExpertSDR3"
+		c.ProtocolName = DefaultProtocolName
 	}
 }
 
@@ -145,17 +211,34 @@ func (s *Store) Get() Config {
 	return c
 }
 
-// Update applies f to the config and saves it.
+// Read calls f with the live config under the lock, without copying it.
+// For hot paths; f must not keep c or call back into the Store.
+func (s *Store) Read(f func(c *Config)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	f(s.cfg)
+}
+
+// Update applies f to the config and saves it. The change takes effect even
+// if saving fails; the error says it was not saved.
 func (s *Store) Update(f func(c *Config)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	f(s.cfg)
 	s.cfg.normalize()
-	_ = os.MkdirAll(filepath.Dir(s.path), 0o755)
-	b, _ := json.MarshalIndent(s.cfg, "", "  ")
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+		return fmt.Errorf("settings not saved: %w", err)
+	}
+	b, err := json.MarshalIndent(s.cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("settings not saved: %w", err)
+	}
 	tmp := s.path + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return err
+		return fmt.Errorf("settings not saved: %w", err)
 	}
-	return os.Rename(tmp, s.path)
+	if err := os.Rename(tmp, s.path); err != nil {
+		return fmt.Errorf("settings not saved: %w", err)
+	}
+	return nil
 }

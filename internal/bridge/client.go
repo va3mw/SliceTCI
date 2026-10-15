@@ -11,6 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/va3mw/FlexTCI/internal/audio"
+	"github.com/va3mw/FlexTCI/internal/flex"
 	"github.com/va3mw/FlexTCI/internal/tci"
 )
 
@@ -330,7 +331,7 @@ func (c *client) dispatch(cmd tci.Command) {
 				ch.lg.Debug("#%d VFO B set not supported (split not mapped yet); echoing VFO A", c.id)
 			} else if idx := needSlice(); idx >= 0 {
 				b.radio.Tune(idx, hz, b.resyncOnError(ch))
-				ch.pinAndBroadcast(c, "freq", hz, func(v *view) { v.Freq = hz }, freqLines(hz)...)
+				ch.pinAndBroadcast(c, "freq", hz, freqLines(hz)...)
 				return
 			}
 		}
@@ -345,7 +346,7 @@ func (c *client) dispatch(cmd tci.Command) {
 					if hz != v.Freq {
 						b.radio.Tune(idx, hz, b.resyncOnError(ch))
 					}
-					ch.pinAndBroadcast(c, "freq", hz, func(v *view) { v.Freq = hz }, freqLines(hz)...)
+					ch.pinAndBroadcast(c, "freq", hz, freqLines(hz)...)
 					return
 				}
 			}
@@ -362,8 +363,8 @@ func (c *client) dispatch(cmd tci.Command) {
 				ch.lg.Warn("#%d unsupported mode %q", c.id, a[1])
 			} else if idx := needSlice(); idx >= 0 {
 				name := tci.FlexToTCI(mode)
-				b.radio.Command("slice set "+strconv.Itoa(idx)+" mode="+mode, b.resyncOnError(ch))
-				ch.pinAndBroadcast(c, "mode", name, func(v *view) { v.Mode = name }, tci.Fmt("modulation", 0, name))
+				b.radio.SetMode(idx, mode, b.resyncOnError(ch))
+				ch.pinAndBroadcast(c, "mode", name, tci.Fmt("modulation", 0, name))
 				return
 			}
 		}
@@ -379,71 +380,39 @@ func (c *client) dispatch(cmd tci.Command) {
 		}
 		cur := ch.currentView()
 		c.sendText(tci.Fmt("rx_filter_band", 0, cur.FLo, cur.FHi))
-	case "trx":
-		if len(a) >= 2 {
-			on, ok := tci.ParseBool(a[1])
-			if !ok {
-				return
-			}
-			src := ""
-			if len(a) >= 3 {
-				src = strings.ToLower(a[2])
-			}
-			if on {
-				if err := b.requestTX(c, src == "tci", false); err != nil {
-					ch.lg.Warn("#%d TX refused: %v", c.id, err)
-					c.sendText(tci.Fmt("trx", 0, false))
-					return
-				}
-				ch.pinAndBroadcast(c, "trx", true, func(v *view) { v.TRX = true }, tci.Fmt("trx", 0, true))
-			} else {
-				b.unkeyRequest(c, "client unkeyed")
-				ch.pinAndBroadcast(c, "trx", false, func(v *view) { v.TRX = false }, tci.Fmt("trx", 0, false))
-			}
+	case "trx", "tune":
+		if len(a) < 2 {
+			c.sendText(tci.Fmt(cmd.Name, 0, pinnable[cmd.Name].get(&v)))
 			return
 		}
-		c.sendText(tci.Fmt("trx", 0, v.TRX))
-	case "tune":
-		if len(a) >= 2 {
-			on, ok := tci.ParseBool(a[1])
-			if !ok {
-				return
-			}
-			if on {
-				if err := b.requestTX(c, false, true); err != nil {
-					ch.lg.Warn("#%d TUNE refused: %v", c.id, err)
-					c.sendText(tci.Fmt("tune", 0, false))
-					return
-				}
-				ch.pinAndBroadcast(c, "tune", true, func(v *view) { v.Tune = true }, tci.Fmt("tune", 0, true))
-			} else {
-				b.unkeyRequest(c, "client ended tune")
-				ch.pinAndBroadcast(c, "tune", false, func(v *view) { v.Tune = false }, tci.Fmt("tune", 0, false))
-			}
+		on, ok := tci.ParseBool(a[1])
+		if !ok {
 			return
 		}
-		c.sendText(tci.Fmt("tune", 0, v.Tune))
+		tune := cmd.Name == "tune"
+		if on {
+			tciAudio := !tune && len(a) >= 3 && strings.EqualFold(a[2], "tci")
+			if err := b.requestTX(c, tciAudio, tune); err != nil {
+				ch.lg.Warn("#%d %s refused: %v", c.id, strings.ToUpper(cmd.Name), err)
+				c.sendText(tci.Fmt(cmd.Name, 0, false))
+				return
+			}
+		} else if tune {
+			b.unkeyRequest(c, "client ended tune")
+		} else {
+			b.unkeyRequest(c, "client unkeyed")
+		}
+		ch.pinAndBroadcast(c, cmd.Name, on, tci.Fmt(cmd.Name, 0, on))
 	case "drive", "tune_drive":
 		if len(a) >= 2 {
 			if p, ok := atoi(a[1]); ok && p >= 0 && p <= 100 {
-				key := "rfpower"
-				if cmd.Name == "tune_drive" {
-					key = "tunepower"
-				}
+				key := map[string]string{"drive": "rfpower", "tune_drive": "tunepower"}[cmd.Name]
 				b.radio.SetTransmit(key + "=" + strconv.Itoa(p))
-				if cmd.Name == "drive" {
-					ch.pinAndBroadcast(c, "drive", p, func(v *view) { v.Drive = p }, tci.Fmt("drive", 0, p))
-				} else {
-					ch.pinAndBroadcast(c, "tune_drive", p, func(v *view) { v.TuneDrive = p }, tci.Fmt("tune_drive", 0, p))
-				}
+				ch.pinAndBroadcast(c, cmd.Name, p, tci.Fmt(cmd.Name, 0, p))
 				return
 			}
 		}
-		val := v.Drive
-		if cmd.Name == "tune_drive" {
-			val = v.TuneDrive
-		}
-		c.sendText(tci.Fmt(cmd.Name, 0, val))
+		c.sendText(tci.Fmt(cmd.Name, 0, pinnable[cmd.Name].get(&v)))
 	case "tx_enable":
 		c.sendText(tci.Fmt("tx_enable", 0, v.TXEnable))
 	case "split_enable":
@@ -458,7 +427,7 @@ func (c *client) dispatch(cmd tci.Command) {
 		if len(a) >= 2 {
 			if on, ok := tci.ParseBool(a[1]); ok {
 				if idx := needSlice(); idx >= 0 {
-					b.radio.SetSlice(idx, key+"="+flexBool(on))
+					b.radio.SetSlice(idx, key+"="+flex.OnOff(on))
 					return
 				}
 			}
@@ -575,13 +544,6 @@ func (c *client) dispatch(cmd tci.Command) {
 			ch.lg.Info("#%d ignoring unsupported command %s (logged once)", c.id, strings.ToUpper(cmd.Name))
 		}
 	}
-}
-
-func flexBool(b bool) string {
-	if b {
-		return "1"
-	}
-	return "0"
 }
 
 // ClientStatus is shown in the UI.
