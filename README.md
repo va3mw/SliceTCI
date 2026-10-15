@@ -122,6 +122,7 @@ internal/audio           resampler and TX FIFO
 internal/tci             TCI text/binary protocol, sample formats, mode map
 internal/bridge          channels, clients, direct RX/TX streams, view diffing, TX arbitration and safety
 internal/logx, config    logging and persisted settings
+tools/mkicon             draws the icon (build/appicon.png, build/windows/icon.ico); own module: go -C tools/mkicon run . ../..
 ```
 
 ## Not done yet / open items
