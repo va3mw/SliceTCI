@@ -2,7 +2,10 @@ package main
 
 import (
 	"embed"
+	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -16,9 +19,20 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-const version = "0.5.3"
+const version = "0.5.4"
+
+// waitPIDFlag is passed to a restarted FlexTCI (after install or update) so
+// it waits for the previous instance to exit before starting.
+const waitPIDFlag = "-wait-pid"
 
 func main() {
+	for i, a := range os.Args {
+		if a == waitPIDFlag && i+1 < len(os.Args) {
+			if pid, err := strconv.Atoi(os.Args[i+1]); err == nil {
+				waitForExit(pid, 15*time.Second)
+			}
+		}
+	}
 	cfg := config.Load()
 	l := logx.New(filepath.Join(config.Dir(), "logs"))
 	l.SetTraffic(cfg.Get().LogTraffic)

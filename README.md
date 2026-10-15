@@ -82,6 +82,18 @@ Modes: `modulations_list` is built from the slice's `mode_list` as reported by t
 
 Each port listens on both `127.0.0.1` and `[::1]`, so `localhost` works in clients that resolve it to IPv6.
 
+## Install and updates
+
+FlexTCI is a single exe with no installer. To keep it in one place:
+
+- **Settings > Install in AppData** copies the running exe to `%APPDATA%\FlexTCI\FlexTCI.exe` (the folder that already holds the settings and logs), creates a desktop shortcut and restarts from there. TCI clients reconnect.
+- **Settings > Desktop shortcut** only adds a shortcut to the exe that is running.
+- **Settings > Check for updates** compares the running version with the [latest GitHub release](https://github.com/va3mw/FlexTCI/releases/latest). If a newer one exists it asks, then downloads it next to the running exe, checks it against the SHA-256 GitHub published, swaps it in and restarts. The previous exe stays as `FlexTCI.exe.old` until the next start.
+
+FlexTCI also checks once at start-up and notes an available update in the log; it never installs without asking. Update checks only work while the repository is public: GitHub answers 404 for a private one, and FlexTCI reports "no public release found".
+
+**Releasing:** bump `version` in `main.go` and `productVersion` in `wails.json`, build, then create a GitHub release tagged `v<version>` with the exe attached as `FlexTCI-<version>.exe`. GitHub records the asset's SHA-256, which the updater checks.
+
 ## Build and test
 
 ```bash
@@ -95,6 +107,7 @@ Settings are stored in `%APPDATA%\FlexTCI\config.json`.
 
 ```
 main.go, app.go          Wails app and UI bindings
+app_install.go           Install, shortcut and update actions (install.go, update.go, shortcut_windows.go)
 frontend/dist/index.html UI (plain HTML/JS, no npm)
 internal/flex            radio discovery (UDP 4992) and SmartSDR TCP API client
 internal/vita            VITA-49 DAX audio packets (parse/build)

@@ -41,6 +41,7 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	go a.logPump()
 	a.bridge.Start()
+	go a.startupChecks()
 }
 
 func (a *App) shutdown(context.Context) {

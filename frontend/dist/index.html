@@ -175,6 +175,15 @@ input[type=number] { width: 72px; }
       <label title="Spots sent by TCI clients are shown on the SmartSDR panadapter for 15 minutes, and clicking one there is reported back to the clients. Turning this off removes the spots FlexTCI added."><input id="spots" type="checkbox"> Show TCI spots on the panadapter</label>
       <label><input id="logTraffic" type="checkbox"> Capture TCI/API traffic in the log</label>
     </div>
+    <div class="group">
+      <b>Install &amp; updates</b>
+      <div class="hint" id="installLine"></div>
+      <button class="btn" id="btnInstall" title="Copy FlexTCI to the settings folder under AppData, make a desktop shortcut and restart from there">Install in AppData</button>
+      <div class="slider">
+        <button class="btn light" id="btnShortcut" style="flex:1">Desktop shortcut</button>
+        <button class="btn light" id="btnUpdate" style="flex:1">Check for updates</button>
+      </div>
+    </div>
     <div class="hint" id="aboutLine"></div>
   </div>
   <div class="foot"><span style="flex:1"></span>
@@ -358,8 +367,27 @@ function renderSettings(s, force) {
 $("btnSettings").onclick = async () => {
   status = await call("GetStatus");
   renderSettings(status, true);
+  renderInstall(await call("GetInstallState"));
   open("setDlg");
 };
+function renderInstall(st) {
+  $("installLine").textContent = `Version ${st.version}, running from ${st.exe}`;
+  $("btnInstall").style.display = st.installed ? "none" : "";
+}
+// Each action may ask a question in a native dialog and may restart FlexTCI.
+async function installAction(fn, btn) {
+  btn.disabled = true;
+  try {
+    const msg = await call(fn);
+    if (msg) toast(msg);
+  } catch {
+  } finally {
+    btn.disabled = false;
+  }
+}
+$("btnInstall").onclick = () => installAction("Install", $("btnInstall"));
+$("btnShortcut").onclick = () => installAction("CreateShortcut", $("btnShortcut"));
+$("btnUpdate").onclick = () => installAction("CheckForUpdates", $("btnUpdate"));
 $("setClose").onclick = () => close("setDlg");
 $("btnConnect").onclick = () => {
   const serial = $("radioSel").value, ip = $("manualIp").value.trim();
