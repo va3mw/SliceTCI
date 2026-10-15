@@ -4,6 +4,18 @@ A TCI (Transceiver Control Interface) server for FlexRadio on Windows. TCI clien
 
 ![FlexTCI 0.3.0 with WSJT-X 3.0 decoding FT8 on a FLEX-6600M, audio direct from the radio](FlexTCIserver.png)
 
+## Download and install
+
+Download `FlexTCI-<version>.exe` from the [latest release](https://github.com/va3mw/FlexTCI/releases/latest) and run it. It is a single exe with no installer and needs no runtime beyond Windows' WebView2, which current Windows 10 and 11 include. Allow it through Windows Firewall when asked, since radio audio arrives over UDP.
+
+To keep it in one place:
+
+- **Settings > Install in AppData** copies the running exe to `%APPDATA%\FlexTCI\FlexTCI.exe` (the folder that already holds the settings and logs), creates a desktop shortcut and restarts from there. TCI clients reconnect.
+- **Settings > Desktop shortcut** only adds a shortcut to the exe that is running.
+- **Settings > Check for updates** compares the running version with the [latest GitHub release](https://github.com/va3mw/FlexTCI/releases/latest). If a newer one exists it asks, then downloads it next to the running exe, checks it against the SHA-256 GitHub published, swaps it in and restarts. The previous exe stays as `FlexTCI.exe.old` until the next start.
+
+FlexTCI also checks once at start-up and notes an available update in the log; it never installs without asking. Update checks only work while the repository is public: GitHub answers 404 for a private one, and FlexTCI reports "no public release found".
+
 ## How it works
 
 ```
@@ -17,7 +29,8 @@ Log4OM ──ws://127.0.0.1:50001──┘   per slice)         └── UDP  �
 * **One TCI port per slice.** Each channel is a port, a slice letter, a DAX channel and an RX gain. The defaults are Slice A → port 50001 → DAX 1, Slice B → 50002 → DAX 2, and so on. Each WSJT-X or JTDX instance uses **TCI Client RX1** on its own port. A client set to RX2 also works: every receiver index on a port maps to that port's slice.
 * You can run 1 to 8 channels (the default is 1). Several clients can share a port (for example WSJT-X and a logger on the same slice), and they are kept in sync.
 * SmartSDR (or another GUI station) must be running, because it owns the slices. SmartSDR DAX is not needed. FlexTCI binds to the station you pick, so in multiFLEX "Slice A" means *that station's* Slice A.
-* When a client connects, the slice's DAX channel is set to match its assignment. You can turn this off with **Set slice DAX channel**.
+* When a client connects, the slice's DAX channel is set to match its assignment. You can turn this off in Settings (**Set the slice's DAX channel when a client connects**).
+* **Band changes.** After a tune to another band, whether from a TCI client or a band button in SmartSDR/Maestro, the radio does not send the slice's new `RF_frequency`; it only reports `transmit freq=` (seen on an AU-520 with v4.3.16). FlexTCI applies that to the TX slice, so clients follow band changes on the transmit slice. See the open items for other slices.
 
 ## WSJT-X setup
 
@@ -29,14 +42,14 @@ Log4OM ──ws://127.0.0.1:50001──┘   per slice)         └── UDP  �
 
    ![WSJT-X Audio settings for FlexTCI](TCI-Audio.png)
 
-**Known WSJT-X issue (seen in WSJT-X improved 3.0.0 and 3.0.2):** at start-up WSJT-X may show **Rig Control Error**, with the detail *TCI audio cannot be started as frequency is OOB*. It happens even when the slice is on a normal frequency.
+**Known WSJT-X issue (seen in WSJT-X improved 3.0.0 and 3.0.2; the same check is in genuine WSJT-X's source):** at start-up WSJT-X may show **Rig Control Error**, with the detail *TCI audio cannot be started as frequency is OOB*. It happens even when the slice is on a normal frequency.
 
 The cause is a timing race inside WSJT-X improved:
 - After opening the TCI connection, WSJT-X waits a fixed 2 s, plus 0.5 s for audio, before it passes the radio's frequency to its main window (`Transceiver/TCITransceiver.cpp`). FlexTCI sends the frequency the moment WSJT-X connects, but no TCI message ends that wait early.
 - Meanwhile WSJT-X checks its band box on a 5 s start-up timer and again when Monitor turns on (`widgets/mainwindow.cpp`). If no frequency has arrived yet, the band box reads "OOB" and the check fails.
 - The first failure triggers a silent retry. The retry does not reconnect, so the second check fails too and shows the dialog.
 
-FlexTCI cannot fix this from the server side. To recover, open WSJT-X **Settings** and close it with **OK**. WSJT-X reconnects, the frequency is known by then, and it works normally.
+FlexTCI cannot fix this from the server side. To recover, click **Retry** in the error dialog, or open WSJT-X **Settings** and close it with **OK**. Either way the check runs again once the frequency is known, and WSJT-X works normally.
 
 For more slices, run one WSJT-X instance per channel (`wsjtx --rig-name=SliceB`) and point each at its own port (50002, 50003, …).
 
@@ -61,7 +74,7 @@ TCI has no authentication, so FlexTCI limits who can reach it:
 
 ## Logging
 
-The log window filters by level (Traffic, Debug, Info, Warnings, Errors) and by text. **Capture TCI/API traffic** records every TCI line in each direction (`#n <-`, `#n ->`) and every radio API command and status. Logs are also written daily to `%APPDATA%\FlexTCI\logs\` (the **Open log folder** button). Each unkey line carries a TX summary, for example `keyed 12.6 s, 590 TX_CHRONO sent, 590 audio blocks received`.
+The log window filters by level (Traffic, Debug, Info, Warnings, Errors) and by text. **Capture TCI/API traffic** records every TCI line in each direction (`#n <-`, `#n ->`) and every radio API command and status. Logs are also written daily to `%APPDATA%\FlexTCI\logs\` (the log window's **Folder** button). Each unkey line carries a TX summary, for example `keyed 12.6 s, 590 TX_CHRONO sent, 590 audio blocks received`.
 
 ## TCI coverage (phase 1)
 
@@ -82,18 +95,6 @@ Modes: `modulations_list` is built from the slice's `mode_list` as reported by t
 
 Each port listens on both `127.0.0.1` and `[::1]`, so `localhost` works in clients that resolve it to IPv6.
 
-## Install and updates
-
-FlexTCI is a single exe with no installer. To keep it in one place:
-
-- **Settings > Install in AppData** copies the running exe to `%APPDATA%\FlexTCI\FlexTCI.exe` (the folder that already holds the settings and logs), creates a desktop shortcut and restarts from there. TCI clients reconnect.
-- **Settings > Desktop shortcut** only adds a shortcut to the exe that is running.
-- **Settings > Check for updates** compares the running version with the [latest GitHub release](https://github.com/va3mw/FlexTCI/releases/latest). If a newer one exists it asks, then downloads it next to the running exe, checks it against the SHA-256 GitHub published, swaps it in and restarts. The previous exe stays as `FlexTCI.exe.old` until the next start.
-
-FlexTCI also checks once at start-up and notes an available update in the log; it never installs without asking. Update checks only work while the repository is public: GitHub answers 404 for a private one, and FlexTCI reports "no public release found".
-
-**Releasing:** bump `version` in `main.go` and `productVersion` in `wails.json`, build, then create a GitHub release tagged `v<version>` with the exe attached as `FlexTCI-<version>.exe`. GitHub records the asset's SHA-256, which the updater checks.
-
 ## Build and test
 
 ```bash
@@ -101,7 +102,13 @@ wails build            # -> build/bin/FlexTCI.exe (no C compiler needed)
 go test ./...          # includes end-to-end tests against a fake radio (TCP API + VITA-49 UDP)
 ```
 
+Both are meant to run on Windows. To build the Windows exe from macOS or Linux, use `wails build -platform windows/amd64 -skipbindings`; skipping bindings is needed because Wails generates them by running the app's Go code on the build machine, and `internal/flex` uses a Windows-only socket option. For the same reason `go test` only compiles on Windows.
+
 Settings are stored in `%APPDATA%\FlexTCI\config.json`.
+
+### Releasing
+
+Bump `version` in `main.go` and `productVersion` in `wails.json`, build, then create a GitHub release tagged `v<version>` with the exe attached as `FlexTCI-<version>.exe`. GitHub records the asset's SHA-256, which the updater checks.
 
 ## Layout
 
@@ -122,4 +129,5 @@ internal/logx, config    logging and persisted settings
 * Split (VFO B to TX frequency), CW macros, meters/sensors, IQ, and SmartLink are deferred, as are other phase 2/3 items in the requirements draft.
 * The TX gain trim is a simple software gain. The level that gives full rated power (OI-15) still has to be measured.
 * `PROTOCOL` reports `ExpertSDR3,2.0` by default for client compatibility (OI-23). You can change it in the UI.
-* Tested on a FLEX-6600M: WSJT-X 3.0 and JTDX, each on its own port and slice, with JTDX set as TCI Client RX2. MSHV and Log4OM are still to be tested. Use the traffic log to capture sessions.
+* A slice that is **not** the TX slice does not follow a band change made outside FlexTCI, because the radio reports no new frequency for it. Reconnect the client if that happens.
+* Tested on a FLEX-6600M (WSJT-X 3.0 and JTDX, each on its own port and slice, with JTDX set as TCI Client RX2) and on an AU-520 with SmartSDR v4.3.16 (WSJT-X improved 3.0.2). MSHV and Log4OM are still to be tested. Use the traffic log to capture sessions.
