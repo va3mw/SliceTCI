@@ -184,10 +184,37 @@ func Dir() string {
 	if err != nil {
 		base = "."
 	}
-	return filepath.Join(base, "FlexTCI")
+	return filepath.Join(base, "SliceTCI")
 }
 
-func Load() *Store { return LoadFrom(filepath.Join(Dir(), "config.json")) }
+// legacyDirName is the settings folder used before the rename to SliceTCI.
+const legacyDirName = "FlexTCI"
+
+// migrateLegacyDir moves the pre-rename settings folder (FlexTCI) to dir when
+// dir does not exist yet. If the folder cannot be moved (an old exe in it is
+// still running), only config.json is copied.
+func migrateLegacyDir(dir string) {
+	if _, err := os.Stat(dir); err == nil {
+		return
+	}
+	old := filepath.Join(filepath.Dir(dir), legacyDirName)
+	if fi, err := os.Stat(old); err != nil || !fi.IsDir() {
+		return
+	}
+	if os.Rename(old, dir) == nil {
+		return
+	}
+	if b, err := os.ReadFile(filepath.Join(old, "config.json")); err == nil {
+		if os.MkdirAll(dir, 0o755) == nil {
+			_ = os.WriteFile(filepath.Join(dir, "config.json"), b, 0o644)
+		}
+	}
+}
+
+func Load() *Store {
+	migrateLegacyDir(Dir())
+	return LoadFrom(filepath.Join(Dir(), "config.json"))
+}
 
 func LoadFrom(path string) *Store {
 	s := &Store{path: path, cfg: Default()}

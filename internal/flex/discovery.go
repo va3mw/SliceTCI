@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/va3mw/FlexTCI/internal/logx"
+	"github.com/va3mw/SliceTCI/internal/logx"
 )
 
 // RadioInfo is one radio seen in the UDP discovery broadcast.

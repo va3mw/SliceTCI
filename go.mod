@@ -1,4 +1,4 @@
-module github.com/va3mw/FlexTCI
+module github.com/va3mw/SliceTCI
 
 go 1.26.2
 

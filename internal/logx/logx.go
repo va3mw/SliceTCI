@@ -124,7 +124,7 @@ func (l *Logger) writeFile(now time.Time, e Entry) {
 		if l.file != nil {
 			l.file.Close()
 		}
-		f, err := os.OpenFile(filepath.Join(l.dir, "FlexTCI-"+day+".log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		f, err := os.OpenFile(filepath.Join(l.dir, "SliceTCI-"+day+".log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 		if err != nil {
 			l.file = nil
 			return

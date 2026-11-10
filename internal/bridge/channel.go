@@ -16,10 +16,10 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/va3mw/FlexTCI/internal/config"
-	"github.com/va3mw/FlexTCI/internal/flex"
-	"github.com/va3mw/FlexTCI/internal/logx"
-	"github.com/va3mw/FlexTCI/internal/tci"
+	"github.com/va3mw/SliceTCI/internal/config"
+	"github.com/va3mw/SliceTCI/internal/flex"
+	"github.com/va3mw/SliceTCI/internal/logx"
+	"github.com/va3mw/SliceTCI/internal/tci"
 )
 
 // Channel is one TCI listener (one port) bound to one slice letter and one

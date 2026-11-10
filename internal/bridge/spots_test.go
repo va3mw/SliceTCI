@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/va3mw/FlexTCI/internal/config"
+	"github.com/va3mw/SliceTCI/internal/config"
 )
 
 func TestSpotColor(t *testing.T) {
@@ -55,9 +55,9 @@ func TestSpots(t *testing.T) {
 
 	// Add: frequency in MHz, ARGB as #AARRGGBB, spaces as 0x7F, a lifetime.
 	c.send("SPOT:DL1ABC,CW,14025000,16711680,CQ DX, up 2;")
-	radio.expect(t, "spot add callsign=DL1ABC rx_freq=14.025000 mode=CW color=#FFFF0000 comment=CQ\x7fDX,up\x7f2 source=FlexTCI lifetime_seconds=900", time.Second)
+	radio.expect(t, "spot add callsign=DL1ABC rx_freq=14.025000 mode=CW color=#FFFF0000 comment=CQ\x7fDX,up\x7f2 source=SliceTCI lifetime_seconds=900", time.Second)
 	c.send("spot:k1xyz,ssb,7150000,-16711936,;")
-	radio.expect(t, "spot add callsign=K1XYZ rx_freq=7.150000 mode=SSB color=#FF00FF00 source=FlexTCI lifetime_seconds=900", time.Second)
+	radio.expect(t, "spot add callsign=K1XYZ rx_freq=7.150000 mode=SSB color=#FF00FF00 source=SliceTCI lifetime_seconds=900", time.Second)
 	settle()
 
 	// A click in SmartSDR reaches every TCI client.
@@ -71,7 +71,7 @@ func TestSpots(t *testing.T) {
 
 	// Client text cannot start a second radio command.
 	c.send("SPOT:W1AW\nxmit 1,CW,14000000,0,x=y;")
-	radio.expect(t, "spot add callsign=W1AWXMIT\x7f1 rx_freq=14.000000 mode=CW color=#FF000000 comment=x-y source=FlexTCI lifetime_seconds=900", time.Second)
+	radio.expect(t, "spot add callsign=W1AWXMIT\x7f1 rx_freq=14.000000 mode=CW color=#FF000000 comment=x-y source=SliceTCI lifetime_seconds=900", time.Second)
 	settle()
 	if radio.sent("xmit 1") {
 		t.Fatal("a line break in a spot injected a radio command")
@@ -80,7 +80,7 @@ func TestSpots(t *testing.T) {
 	// The same callsign again replaces its spot.
 	c.send("SPOT:K1XYZ,CW,7005000,0,;")
 	radio.expect(t, "spot remove 8", time.Second)
-	radio.expect(t, "spot add callsign=K1XYZ rx_freq=7.005000 mode=CW color=#FF000000 source=FlexTCI lifetime_seconds=900", time.Second)
+	radio.expect(t, "spot add callsign=K1XYZ rx_freq=7.005000 mode=CW color=#FF000000 source=SliceTCI lifetime_seconds=900", time.Second)
 	settle()
 
 	// Clear removes our spots (9 and 10) and nobody else's.
@@ -93,7 +93,7 @@ func TestSpots(t *testing.T) {
 		}
 	}
 	if radio.sent("spot clear") || radio.sent("spot remove 50") {
-		t.Fatal("SPOT_CLEAR touched spots FlexTCI did not add")
+		t.Fatal("SPOT_CLEAR touched spots SliceTCI did not add")
 	}
 
 	// A spot the radio expired is forgotten.

@@ -16,7 +16,7 @@ import (
 
 // releasesAPI is the latest GitHub release. It only answers while the
 // repository is public; a private repository returns 404.
-const releasesAPI = "https://api.github.com/repos/va3mw/FlexTCI/releases/latest"
+const releasesAPI = "https://api.github.com/repos/va3mw/SliceTCI/releases/latest"
 
 type updateInfo struct {
 	Version string
@@ -25,14 +25,14 @@ type updateInfo struct {
 }
 
 // fetchRelease reads the latest release: its tag (v0.5.3) is the version, and
-// its exe asset (FlexTCI-0.5.3.exe) carries the SHA-256 GitHub recorded.
+// its exe asset (SliceTCI-0.5.3.exe) carries the SHA-256 GitHub recorded.
 func fetchRelease(apiURL string) (updateInfo, error) {
 	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
 		return updateInfo{}, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "FlexTCI/"+version)
+	req.Header.Set("User-Agent", "SliceTCI/"+version)
 	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
 	if err != nil {
 		return updateInfo{}, err
@@ -58,11 +58,11 @@ func fetchRelease(apiURL string) (updateInfo, error) {
 	}
 	for _, a := range rel.Assets {
 		sum, ok := strings.CutPrefix(a.Digest, "sha256:")
-		if strings.HasPrefix(a.Name, "FlexTCI") && strings.HasSuffix(a.Name, ".exe") && ok && len(sum) == 64 && a.URL != "" {
+		if strings.HasPrefix(a.Name, "SliceTCI") && strings.HasSuffix(a.Name, ".exe") && ok && len(sum) == 64 && a.URL != "" {
 			return updateInfo{Version: strings.TrimPrefix(rel.TagName, "v"), SHA256: strings.ToLower(sum), URL: a.URL}, nil
 		}
 	}
-	return updateInfo{}, errors.New("the latest release has no FlexTCI exe with a checksum")
+	return updateInfo{}, errors.New("the latest release has no SliceTCI exe with a checksum")
 }
 
 // newerVersion reports whether version a is newer than b ("0.10.0" > "0.9.2").
@@ -108,7 +108,7 @@ func downloadUpdate(info updateInfo, exePath string) (string, error) {
 		err = errors.New("the download does not match the published checksum")
 	}
 	if err == nil && n < 1<<20 {
-		err = errors.New("the download is too small to be FlexTCI")
+		err = errors.New("the download is too small to be SliceTCI")
 	}
 	if err != nil {
 		os.Remove(tmp)

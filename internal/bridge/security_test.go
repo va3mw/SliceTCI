@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/va3mw/FlexTCI/internal/tci"
+	"github.com/va3mw/SliceTCI/internal/tci"
 )
 
 func TestAllowedOrigin(t *testing.T) {

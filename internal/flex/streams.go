@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/va3mw/FlexTCI/internal/vita"
+	"github.com/va3mw/SliceTCI/internal/vita"
 )
 
 // VitaPort is the radio's UDP port for VITA-49 streams (overridden by tests).

@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/va3mw/FlexTCI/internal/config"
+	"github.com/va3mw/SliceTCI/internal/config"
 )
 
-const exeName = "FlexTCI.exe"
+const exeName = "SliceTCI.exe"
 
-// installedExe is where Install puts FlexTCI: %APPDATA%\FlexTCI, the folder
+// installedExe is where Install puts SliceTCI: %APPDATA%\SliceTCI, the folder
 // that already holds its settings and logs.
 func installedExe() string { return filepath.Join(config.Dir(), exeName) }
 
@@ -47,7 +47,7 @@ func copyFile(src, dst string) error {
 // aside to .old first, since it may be running.
 func installTo(srcExe, dst string) error {
 	if samePath(srcExe, dst) {
-		return errors.New("FlexTCI is already running from " + filepath.Dir(dst))
+		return errors.New("SliceTCI is already running from " + filepath.Dir(dst))
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
@@ -89,7 +89,7 @@ func swapExe(exePath, newPath string) error {
 // cleanupOldExe removes the previous exe left by an install or update.
 func cleanupOldExe(exePath string) { os.Remove(exePath + ".old") }
 
-// waitForExit is used by a restarted FlexTCI (started with -wait-pid) to let
+// waitForExit is used by a restarted SliceTCI (started with -wait-pid) to let
 // the previous instance close first: it holds the single-instance lock and
 // the TCI ports. It gives up after timeout.
 func waitForExit(pid int, timeout time.Duration) {

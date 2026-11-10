@@ -11,11 +11,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/va3mw/FlexTCI/internal/audio"
-	"github.com/va3mw/FlexTCI/internal/config"
-	"github.com/va3mw/FlexTCI/internal/flex"
-	"github.com/va3mw/FlexTCI/internal/logx"
-	"github.com/va3mw/FlexTCI/internal/tci"
+	"github.com/va3mw/SliceTCI/internal/audio"
+	"github.com/va3mw/SliceTCI/internal/config"
+	"github.com/va3mw/SliceTCI/internal/flex"
+	"github.com/va3mw/SliceTCI/internal/logx"
+	"github.com/va3mw/SliceTCI/internal/tci"
 )
 
 type stopper interface{ Stop() }

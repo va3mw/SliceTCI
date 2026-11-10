@@ -1,4 +1,4 @@
-// mkicon draws the FlexTCI icon and writes build/appicon.png (1024 px) and
+// mkicon draws the SliceTCI icon and writes build/appicon.png (1024 px) and
 // build/windows/icon.ico. From the repository root:
 //
 //	go -C tools/mkicon run . ../..
@@ -24,7 +24,7 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-// A teal gradient, so FlexTCI is easy to tell from SliceTrigger's blue icon
+// A teal gradient, so SliceTCI is easy to tell from SliceTrigger's blue icon
 // in the taskbar.
 var (
 	bgTop    = color.NRGBA{0x14, 0x8A, 0x84, 0xFF}

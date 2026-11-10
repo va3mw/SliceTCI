@@ -1,4 +1,4 @@
-module flextci/tools/mkicon
+module slicetci/tools/mkicon
 
 go 1.26.0
 

@@ -9,10 +9,10 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"github.com/va3mw/FlexTCI/internal/logx"
+	"github.com/va3mw/SliceTCI/internal/logx"
 )
 
-// InstallState tells the Settings dialog where FlexTCI runs from.
+// InstallState tells the Settings dialog where SliceTCI runs from.
 type InstallState struct {
 	Version     string `json:"version"`
 	Exe         string `json:"exe"`
@@ -32,7 +32,7 @@ func (a *App) ask(title, msg string) bool {
 	return err == nil && r == "Yes"
 }
 
-// Install copies the running exe to %APPDATA%\FlexTCI, creates a desktop
+// Install copies the running exe to %APPDATA%\SliceTCI, creates a desktop
 // shortcut to it and restarts from there. It returns "" if the operator
 // cancels.
 func (a *App) Install() (string, error) {
@@ -42,10 +42,10 @@ func (a *App) Install() (string, error) {
 	}
 	dst := installedExe()
 	if samePath(exe, dst) {
-		return "FlexTCI is already installed and running from " + filepath.Dir(dst), nil
+		return "SliceTCI is already installed and running from " + filepath.Dir(dst), nil
 	}
-	if !a.ask("Install FlexTCI", "Install FlexTCI to\n\n"+filepath.Dir(dst)+"\n\n"+
-		"That folder already holds your settings and logs. A desktop shortcut is created, and FlexTCI "+
+	if !a.ask("Install SliceTCI", "Install SliceTCI to\n\n"+filepath.Dir(dst)+"\n\n"+
+		"That folder already holds your settings and logs. A desktop shortcut is created, and SliceTCI "+
 		"restarts from the new location (TCI clients reconnect). Updates will install there too.\n\nInstall now?") {
 		return "", nil
 	}
@@ -87,17 +87,17 @@ func (a *App) CheckForUpdates() (string, error) {
 		return "", fmt.Errorf("could not check for updates: %w", err)
 	}
 	if !newerVersion(info.Version, version) {
-		return "FlexTCI " + version + " is up to date", nil
+		return "SliceTCI " + version + " is up to date", nil
 	}
-	if !a.ask("Update FlexTCI", fmt.Sprintf("FlexTCI %s is available (you have %s).\n\n"+
-		"Download and install it now? FlexTCI restarts afterwards (TCI clients reconnect).", info.Version, version)) {
+	if !a.ask("Update SliceTCI", fmt.Sprintf("SliceTCI %s is available (you have %s).\n\n"+
+		"Download and install it now? SliceTCI restarts afterwards (TCI clients reconnect).", info.Version, version)) {
 		return "", nil
 	}
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err
 	}
-	a.log.Log(logx.Info, "app", "downloading FlexTCI %s", info.Version)
+	a.log.Log(logx.Info, "app", "downloading SliceTCI %s", info.Version)
 	newPath, err := downloadUpdate(info, exe)
 	if err == nil {
 		err = swapExe(exe, newPath)
@@ -107,7 +107,7 @@ func (a *App) CheckForUpdates() (string, error) {
 		a.log.Log(logx.Error, "app", "update failed: %v", err)
 		return "", fmt.Errorf("update failed: %w", err)
 	}
-	a.log.Log(logx.Info, "app", "FlexTCI %s installed; restarting", info.Version)
+	a.log.Log(logx.Info, "app", "SliceTCI %s installed; restarting", info.Version)
 	return "Updated to " + info.Version + "; restarting", a.restartAs(exe)
 }
 
@@ -122,7 +122,7 @@ func (a *App) startupChecks() {
 	case err != nil:
 		a.log.Log(logx.Debug, "app", "update check: %v", err)
 	case newerVersion(info.Version, version):
-		a.log.Log(logx.Info, "app", "FlexTCI %s is available (you have %s): Settings > Check for updates", info.Version, version)
+		a.log.Log(logx.Info, "app", "SliceTCI %s is available (you have %s): Settings > Check for updates", info.Version, version)
 	}
 }
 

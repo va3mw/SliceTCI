@@ -14,11 +14,11 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/va3mw/FlexTCI/internal/config"
-	"github.com/va3mw/FlexTCI/internal/flex"
-	"github.com/va3mw/FlexTCI/internal/logx"
-	"github.com/va3mw/FlexTCI/internal/tci"
-	"github.com/va3mw/FlexTCI/internal/vita"
+	"github.com/va3mw/SliceTCI/internal/config"
+	"github.com/va3mw/SliceTCI/internal/flex"
+	"github.com/va3mw/SliceTCI/internal/logx"
+	"github.com/va3mw/SliceTCI/internal/tci"
+	"github.com/va3mw/SliceTCI/internal/vita"
 )
 
 // fakeRadio speaks just enough of the SmartSDR API for the bridge. Status
@@ -166,7 +166,7 @@ func (f *fakeRadio) serve() {
 			send("S0000ABCD|spot " + strings.TrimPrefix(cmd, "spot remove ") + " removed")
 		case cmd == "info":
 			send("R" + seq + `|0|model="FLEX-6600M",chassis_serial="1234",name="RXb-VA3MW",callsign="VA3MW"`)
-		case cmd == "sub interlock all" || cmd == "client program FlexTCI":
+		case cmd == "sub interlock all" || cmd == "client program SliceTCI":
 			send("R" + seq + "|500000A3|Invalid subscription object name")
 		default:
 			send("R" + seq + "|0|")
@@ -357,7 +357,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 	}
 	radio.expect(t, "slice set 0 dax=1", 2*time.Second)
-	for _, bad := range []string{"sub interlock all", "client program FlexTCI"} {
+	for _, bad := range []string{"sub interlock all", "client program SliceTCI"} {
 		if radio.sent(bad) {
 			t.Errorf("sent rejected command %q", bad)
 		}
@@ -434,7 +434,7 @@ func TestEndToEnd(t *testing.T) {
 	radio.expect(t, "xmit 0", time.Second)
 
 	// TCI audio keying without audio replies: safety unkey after the timeout.
-	// The slice was left in USB with TX DAX off: before keying, FlexTCI
+	// The slice was left in USB with TX DAX off: before keying, SliceTCI
 	// must switch to DIGU and turn TX DAX on (and leave both that way).
 	c.send("TRX:0,true,tci;")
 	radio.expect(t, "slice set 0 mode=DIGU", time.Second)

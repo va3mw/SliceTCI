@@ -1,7 +1,7 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "FlexTCI",
-  "outputfilename": "FlexTCI",
+  "name": "SliceTCI",
+  "outputfilename": "SliceTCI",
   "frontend:install": "",
   "frontend:build": "",
   "frontend:dir": "frontend",
@@ -10,8 +10,8 @@
     "name": "Michael VA3MW"
   },
   "info": {
-    "productName": "FlexTCI",
-    "productVersion": "0.5.6",
+    "productName": "SliceTCI",
+    "productVersion": "0.6.0",
     "comments": "TCI server bridge for FlexRadio"
   }
 }

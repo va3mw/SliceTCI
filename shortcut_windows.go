@@ -11,19 +11,19 @@ import (
 
 const createNoWindow = 0x08000000
 
-// createDesktopShortcut puts FlexTCI.lnk on the current user's desktop
+// createDesktopShortcut puts SliceTCI.lnk on the current user's desktop
 // (wherever Windows has it, including a OneDrive-redirected desktop) and
 // returns its path. It uses the WScript.Shell COM object via PowerShell; the
 // paths go in through environment variables so no quoting is needed.
 func createDesktopShortcut(exe string) (string, error) {
 	script := `$ErrorActionPreference = 'Stop'
 $d = [Environment]::GetFolderPath('Desktop')
-$p = Join-Path $d 'FlexTCI.lnk'
+$p = Join-Path $d 'SliceTCI.lnk'
 $s = (New-Object -ComObject WScript.Shell).CreateShortcut($p)
 $s.TargetPath = $env:FT_TARGET
 $s.WorkingDirectory = $env:FT_DIR
 $s.IconLocation = $env:FT_TARGET + ',0'
-$s.Description = 'FlexTCI'
+$s.Description = 'SliceTCI'
 $s.Save()
 Write-Output $p`
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)

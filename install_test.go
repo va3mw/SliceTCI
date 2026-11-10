@@ -14,7 +14,7 @@ import (
 
 func TestInstallTo(t *testing.T) {
 	dir := t.TempDir()
-	src := filepath.Join(dir, "Downloads", "FlexTCI-0.5.3.exe")
+	src := filepath.Join(dir, "Downloads", "SliceTCI-0.5.3.exe")
 	os.MkdirAll(filepath.Dir(src), 0o755)
 	os.WriteFile(src, []byte("new"), 0o644)
 	dst := filepath.Join(dir, "AppData", exeName)
@@ -76,7 +76,7 @@ func TestFetchAndDownload(t *testing.T) {
 		case "/latest":
 			fmt.Fprintf(w, `{"tag_name":"v0.6.0","assets":[
 				{"name":"notes.txt","digest":"sha256:%s","browser_download_url":"%s/notes"},
-				{"name":"FlexTCI-0.6.0.exe","digest":"sha256:%s","browser_download_url":"%s/exe"}]}`,
+				{"name":"SliceTCI-0.6.0.exe","digest":"sha256:%s","browser_download_url":"%s/exe"}]}`,
 				digest, srv.URL, digest, srv.URL)
 		case "/exe":
 			w.Write(exe)

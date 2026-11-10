@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/va3mw/FlexTCI/internal/logx"
+	"github.com/va3mw/SliceTCI/internal/logx"
 )
 
 // Slice mirrors the radio's slice status.

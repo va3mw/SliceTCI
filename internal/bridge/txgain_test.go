@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/va3mw/FlexTCI/internal/audio"
-	"github.com/va3mw/FlexTCI/internal/config"
+	"github.com/va3mw/SliceTCI/internal/audio"
+	"github.com/va3mw/SliceTCI/internal/config"
 )
 
 // TX gain is applied to the audio sent to the radio, and takes effect on

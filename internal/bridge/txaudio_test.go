@@ -9,10 +9,10 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/va3mw/FlexTCI/internal/config"
-	"github.com/va3mw/FlexTCI/internal/logx"
-	"github.com/va3mw/FlexTCI/internal/tci"
-	"github.com/va3mw/FlexTCI/internal/vita"
+	"github.com/va3mw/SliceTCI/internal/config"
+	"github.com/va3mw/SliceTCI/internal/logx"
+	"github.com/va3mw/SliceTCI/internal/tci"
+	"github.com/va3mw/SliceTCI/internal/vita"
 )
 
 // runTone keys TCI-audio TX and answers every TX_CHRONO after delay with a

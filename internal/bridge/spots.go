@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/va3mw/FlexTCI/internal/tci"
+	"github.com/va3mw/SliceTCI/internal/tci"
 )
 
 // maxSpots bounds the spots tracked at once: callsigns come from the client.
@@ -88,7 +88,7 @@ func (b *Bridge) addSpot(c *client, a []string) {
 			cmd += " comment=" + text
 		}
 	}
-	cmd += fmt.Sprintf(" source=FlexTCI lifetime_seconds=%d", spotLifetimeSeconds)
+	cmd += fmt.Sprintf(" source=SliceTCI lifetime_seconds=%d", spotLifetimeSeconds)
 
 	now := time.Now()
 	epoch := b.radio.Epoch()

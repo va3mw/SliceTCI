@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FlexTCI</title>
+<title>SliceTCI</title>
 <style>
 /* Styled after SmartSDR CAT / DAX: light Windows panel, list of port tiles. */
 :root {
@@ -168,17 +168,17 @@ input[type=number] { width: 72px; }
     <div class="group">
       <b>Behaviour</b>
       <div class="field"><label for="unkeyMs" title="Unkey if the transmitting client stops sending TCI audio for this long">Safety unkey (ms)</label><input id="unkeyMs" type="number" min="500" max="10000" step="100"></div>
-      <div class="field"><label for="maxTx" title="TX watchdog: the longest single transmission FlexTCI allows">Max TX time (s)</label><input id="maxTx" type="number" min="5" max="3600" step="5"></div>
+      <div class="field"><label for="maxTx" title="TX watchdog: the longest single transmission SliceTCI allows">Max TX time (s)</label><input id="maxTx" type="number" min="5" max="3600" step="5"></div>
       <div class="field"><label for="protoName">Protocol name</label><input id="protoName" type="text"></div>
       <label><input id="autoDax" type="checkbox"> Set the slice's DAX channel when a client connects</label>
       <label title="When a client transmits its own (TCI) audio: USB becomes DIGU, LSB becomes DIGL, and TX DAX is turned on if it was off. Both changes are logged and left in place."><input id="digitalTx" type="checkbox"> On TCI-audio transmit, switch USB/LSB to DIGU/DIGL and turn on TX DAX</label>
-      <label title="Spots sent by TCI clients are shown on the SmartSDR panadapter for 15 minutes, and clicking one there is reported back to the clients. Turning this off removes the spots FlexTCI added."><input id="spots" type="checkbox"> Show TCI spots on the panadapter</label>
+      <label title="Spots sent by TCI clients are shown on the SmartSDR panadapter for 15 minutes, and clicking one there is reported back to the clients. Turning this off removes the spots SliceTCI added."><input id="spots" type="checkbox"> Show TCI spots on the panadapter</label>
       <label><input id="logTraffic" type="checkbox"> Capture TCI/API traffic in the log</label>
     </div>
     <div class="group">
       <b>Install &amp; updates</b>
       <div class="hint" id="installLine"></div>
-      <button class="btn" id="btnInstall" title="Copy FlexTCI to the settings folder under AppData, make a desktop shortcut and restart from there">Install in AppData</button>
+      <button class="btn" id="btnInstall" title="Copy SliceTCI to the settings folder under AppData, make a desktop shortcut and restart from there">Install in AppData</button>
       <div class="slider">
         <button class="btn light" id="btnShortcut" style="flex:1">Desktop shortcut</button>
         <button class="btn light" id="btnUpdate" style="flex:1">Check for updates</button>
@@ -385,7 +385,7 @@ function renderInstall(st) {
   $("installLine").textContent = `Version ${st.version}, running from ${st.exe}`;
   $("btnInstall").style.display = st.installed ? "none" : "";
 }
-// Each action may ask a question in a native dialog and may restart FlexTCI.
+// Each action may ask a question in a native dialog and may restart SliceTCI.
 async function installAction(fn, btn) {
   btn.disabled = true;
   try {

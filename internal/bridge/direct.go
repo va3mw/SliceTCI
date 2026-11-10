@@ -6,10 +6,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/va3mw/FlexTCI/internal/audio"
-	"github.com/va3mw/FlexTCI/internal/flex"
-	"github.com/va3mw/FlexTCI/internal/logx"
-	"github.com/va3mw/FlexTCI/internal/vita"
+	"github.com/va3mw/SliceTCI/internal/audio"
+	"github.com/va3mw/SliceTCI/internal/flex"
+	"github.com/va3mw/SliceTCI/internal/logx"
+	"github.com/va3mw/SliceTCI/internal/vita"
 )
 
 // worker is a goroutine that runs until Stop, which waits for it to finish.
@@ -103,7 +103,7 @@ func startDirectRX(r *flex.Radio, lg *logx.Source, dax int, gain func() float32,
 				continue
 			}
 			if !warnedSilent && packets.Load() == 0 && time.Since(created) > 3*time.Second {
-				lg.Warn("no audio packets on DAX channel %d yet: check the slice's DAX channel is %d and that Windows Firewall allows FlexTCI (UDP)", dax, dax)
+				lg.Warn("no audio packets on DAX channel %d yet: check the slice's DAX channel is %d and that Windows Firewall allows SliceTCI (UDP)", dax, dax)
 				warnedSilent = true
 			}
 		}
@@ -209,7 +209,7 @@ func (d *directTX) start(pull func([]float32)) stopper {
 				due -= vita.TXFrames
 				if !d.r.StreamOwnsTX(id) {
 					if !warned && time.Since(began) > time.Second {
-						d.lg.Warn("radio has not given FlexTCI DAX TX ownership (another DAX client may own it)")
+						d.lg.Warn("radio has not given SliceTCI DAX TX ownership (another DAX client may own it)")
 						warned = true
 					}
 					continue

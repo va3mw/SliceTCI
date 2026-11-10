@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/va3mw/FlexTCI/internal/logx"
-	"github.com/va3mw/FlexTCI/internal/vita"
+	"github.com/va3mw/SliceTCI/internal/logx"
+	"github.com/va3mw/SliceTCI/internal/vita"
 )
 
 func TestParseInfo(t *testing.T) {

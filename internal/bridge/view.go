@@ -3,8 +3,8 @@ package bridge
 import (
 	"time"
 
-	"github.com/va3mw/FlexTCI/internal/flex"
-	"github.com/va3mw/FlexTCI/internal/tci"
+	"github.com/va3mw/SliceTCI/internal/flex"
+	"github.com/va3mw/SliceTCI/internal/tci"
 )
 
 // view is what a TCI client sees for transceiver 0 of a channel. Each

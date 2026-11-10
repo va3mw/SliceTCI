@@ -10,9 +10,9 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"github.com/va3mw/FlexTCI/internal/bridge"
-	"github.com/va3mw/FlexTCI/internal/config"
-	"github.com/va3mw/FlexTCI/internal/logx"
+	"github.com/va3mw/SliceTCI/internal/bridge"
+	"github.com/va3mw/SliceTCI/internal/config"
+	"github.com/va3mw/SliceTCI/internal/logx"
 )
 
 // App is the Wails-bound facade over the bridge.

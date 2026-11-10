@@ -12,16 +12,16 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 
-	"github.com/va3mw/FlexTCI/internal/config"
-	"github.com/va3mw/FlexTCI/internal/logx"
+	"github.com/va3mw/SliceTCI/internal/config"
+	"github.com/va3mw/SliceTCI/internal/logx"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
-const version = "0.5.6"
+const version = "0.6.0"
 
-// waitPIDFlag is passed to a restarted FlexTCI (after install or update) so
+// waitPIDFlag is passed to a restarted SliceTCI (after install or update) so
 // it waits for the previous instance to exit before starting.
 const waitPIDFlag = "-wait-pid"
 
@@ -36,11 +36,11 @@ func main() {
 	cfg := config.Load()
 	l := logx.New(filepath.Join(config.Dir(), "logs"))
 	l.SetTraffic(cfg.Get().LogTraffic)
-	l.Log(logx.Info, "app", "FlexTCI %s starting; settings in %s", version, config.Dir())
+	l.Log(logx.Info, "app", "SliceTCI %s starting; settings in %s", version, config.Dir())
 
 	app := NewApp(l, cfg)
 	err := wails.Run(&options.App{
-		Title:     "FlexTCI " + version,
+		Title:     "SliceTCI " + version,
 		Width:     330,
 		Height:    820,
 		MinWidth:  300,
@@ -53,7 +53,7 @@ func main() {
 		OnShutdown:       app.shutdown,
 		Bind:             []interface{}{app},
 		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId: "va3mw-flextci-1",
+			UniqueId: "va3mw-slicetci-1",
 		},
 		Windows: &windows.Options{},
 	})
