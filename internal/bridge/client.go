@@ -296,9 +296,14 @@ func (c *client) dispatch(cmd tci.Command) {
 	ch, b := c.ch, c.ch.b
 	a := cmd.Args
 	v := ch.currentView()
-	// needSlice guards set commands; it logs and returns -1 when the slice is closed.
+	// needSlice guards set commands; it logs and returns -1 when the slice is
+	// closed. A slice that is missing only briefly (the radio reshuffling TX
+	// assignment) is waited for rather than dropping the client's command.
 	needSlice := func() int {
 		idx := ch.sliceIndex()
+		if idx < 0 && ch.waitPresent(setWait) {
+			idx = ch.sliceIndex()
+		}
 		if idx < 0 {
 			ch.lg.Warn("#%d %s ignored: Slice %s is not open", c.id, cmd.Raw, ch.cfg.Slice)
 		}

@@ -45,6 +45,22 @@ func computeView(s *flex.Snapshot, letter string) view {
 	return v
 }
 
+// holdAbsent is the view to show while the slice is not reported open. The
+// radio can drop a slice from our snapshot for a fraction of a second while
+// Maestro/SmartSDR reshuffles TX assignment (seen at WSJT-X startup: Slice A
+// "not open" then back 150 ms later). A zeroed view would push vfo 0 to the
+// client, which WSJT-X rejects as "frequency is OOB". Keep the last known
+// frequency, mode, filter, offsets and drive; only the transmit state drops.
+func holdAbsent(last view) view {
+	v := last
+	v.Present = false
+	v.SliceIdx = -1
+	v.TXEnable = false
+	v.TRX = false
+	v.Tune = false
+	return v
+}
+
 // pin holds an optimistic value we already echoed to clients. Until the radio
 // reports the same value (or the pin expires) the radio's older value is not
 // pushed, which avoids the stale-echo oscillation seen in other servers.
