@@ -45,7 +45,23 @@ type Channel struct {
 	daxSetFor int           // slice index we last set dax= on
 
 	refreshQueued bool // a re-sync after pin expiry is scheduled
+
+	absentSince time.Time // when the slice went missing; zero while present
+	absentGen   int       // bumps on every presence change, voids a pending warning
+	absentWarn  bool      // the "not open" warning was logged for this absence
 }
+
+// absentGrace is how long the slice may be missing before it is reported as
+// closed. Shorter gaps happen while the radio reshuffles TX assignment.
+const absentGrace = 2 * time.Second
+
+// initWait is how long a new client's READY waits for the slice to appear,
+// so its first VFO report is a real frequency rather than 0.
+const initWait = 3 * time.Second
+
+// setWait is how long a set command waits for the slice to reappear before
+// it is dropped as "slice not open".
+const setWait = 1500 * time.Millisecond
 
 // setRXGain changes the RX gain live. ch.cfg is read without a lock by other
 // goroutines and is never modified after creation; the gain lives only in
@@ -166,6 +182,9 @@ func (ch *Channel) serveWS(w http.ResponseWriter, r *http.Request) {
 	n := len(ch.clients)
 	ch.mu.Unlock()
 	ch.lg.Info("client #%d connected from %s (%d on this port)", c.id, r.RemoteAddr, n)
+	if !ch.waitPresent(initWait) {
+		ch.lg.Warn("client #%d: Slice %s is not open on the radio; sending state without it", c.id, ch.cfg.Slice)
+	}
 	c.sendInit()
 	ch.ensureSliceDAX()
 	ch.b.notifyUI()
@@ -200,23 +219,46 @@ func (ch *Channel) clientList() []*client {
 func (ch *Channel) sync(s *flex.Snapshot) {
 	cur := computeView(s, ch.cfg.Slice)
 	ch.mu.Lock()
+	old := ch.last
+	if !cur.Present {
+		cur = holdAbsent(old)
+	}
 	if applyPins(&cur, ch.pins) && !ch.refreshQueued {
 		// The radio moved while a pin hides it; push the real value once
 		// the pin has expired, even if the radio sends nothing more.
 		ch.refreshQueued = true
 		time.AfterFunc(pinHold+100*time.Millisecond, ch.refresh)
 	}
-	old := ch.last
 	ch.last = cur
 	lines := diff(old, cur, false)
 	cl := ch.clientList()
+	var gap time.Duration
+	warned := false
+	gen := 0
+	if old.Present != cur.Present {
+		ch.absentGen++
+		gen = ch.absentGen
+		if cur.Present {
+			if !ch.absentSince.IsZero() {
+				gap = time.Since(ch.absentSince)
+			}
+			warned = ch.absentWarn
+			ch.absentSince, ch.absentWarn = time.Time{}, false
+		} else {
+			ch.absentSince = time.Now()
+		}
+	}
 	ch.mu.Unlock()
 
 	if old.Present != cur.Present {
-		if cur.Present {
+		switch {
+		case cur.Present && gap > 0 && gap < absentGrace && !warned:
+			ch.lg.Debug("Slice %s was missing for %d ms; held its last state", ch.cfg.Slice, gap.Milliseconds())
+		case cur.Present:
 			ch.lg.Info("Slice %s is available (radio slice %d)", ch.cfg.Slice, cur.SliceIdx)
-		} else if s.Connected {
-			ch.lg.Warn("Slice %s is not open on station \"%s\"; TX disabled for this channel", ch.cfg.Slice, s.BoundStation)
+		case s.Connected:
+			station := s.BoundStation
+			time.AfterFunc(absentGrace, func() { ch.warnAbsent(gen, station) })
 		}
 	}
 	if cur.Present {
@@ -227,6 +269,35 @@ func (ch *Channel) sync(s *flex.Snapshot) {
 	}
 	for _, c := range cl {
 		c.sendText(lines...)
+	}
+}
+
+// warnAbsent logs that the slice is closed, unless it came back (or changed
+// again) since the absence numbered gen began.
+func (ch *Channel) warnAbsent(gen int, station string) {
+	ch.mu.Lock()
+	still := ch.absentGen == gen && !ch.last.Present
+	if still {
+		ch.absentWarn = true
+	}
+	ch.mu.Unlock()
+	if still {
+		ch.lg.Warn("Slice %s is not open on station \"%s\"; TX disabled for this channel", ch.cfg.Slice, station)
+	}
+}
+
+// waitPresent waits up to d for the slice to be open on the radio and
+// reports whether it is.
+func (ch *Channel) waitPresent(d time.Duration) bool {
+	deadline := time.Now().Add(d)
+	for {
+		if ch.currentView().Present {
+			return true
+		}
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
