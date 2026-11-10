@@ -34,6 +34,10 @@ Log4OM ──ws://127.0.0.1:50001──┘   per slice)         └── UDP  �
 * When a client connects, the slice's DAX channel is set to match its assignment. You can turn this off in Settings (**Set the slice's DAX channel when a client connects**).
 * **Band changes.** After a tune to another band, whether from a TCI client or a band button in SmartSDR/Maestro, the radio does not send the slice's new `RF_frequency`; it only reports `transmit freq=` (seen on an AU-520 with v4.3.16). SliceTCI applies that to the TX slice, so clients follow band changes on the transmit slice. See the open items for other slices.
 
+### Digital modes over the internet
+
+When the radio is remote (over a VPN, Tailscale or any internet link), expect some packet loss and data corruption in the audio. The DAX streams are UDP, which does not resend lost packets or repair damaged ones, so this is normal behaviour of the protocol and not a SliceTCI fault. On a poor link you may see fewer decodes, weaker reports or failed decodes in WSJT-X, and gaps in the transmitted audio. A wired, low-latency connection gives the best results.
+
 ## WSJT-X setup
 
 1. **Settings → Radio:** Rig **TCI Client RX1**, TCI Server `127.0.0.1:50001` (the channel's port). PTT method **CAT**. Mode **None** (SliceTCI switches USB/LSB to DIGU/DIGL itself when transmitting). Split operation **None** or **Fake It** (TCI split is not mapped yet).
