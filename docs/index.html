@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SliceTCI</title>
+<meta name="description" content="A TCI server for FlexRadio on Windows: one WebSocket port per slice, with DAX audio straight from the radio. No CAT, no virtual audio cables, no SmartSDR DAX.">
+<meta property="og:title" content="SliceTCI">
+<meta property="og:description" content="One connection instead of CAT + DAX. A TCI server for FlexRadio, with audio straight from the radio.">
+<meta property="og:image" content="https://va3mw.github.io/SliceTCI/icon.png">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="icon.png" type="image/png">
+<style>
+:root {
+  --bg: #0f1418;
+  --bg2: #141b20;
+  --card: #19222a;
+  --line: #2a3640;
+  --text: #e3ecf0;
+  --dim: #93a6b0;
+  --faint: #5d6f7a;
+  --teal: #1fb3a5;
+  --sky: #3fb6ff;
+  --orange: #ffad3a;
+  --violet: #b48cff;
+  --on: #3ddc84;
+  --bad: #ff5468;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.6 "Segoe UI", system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+a { color: var(--sky); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre { font-family: "Cascadia Mono", Consolas, ui-monospace, monospace; font-size: 14px; }
+code { background: #ffffff10; padding: 1px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+
+/* ---- hero ---- */
+header {
+  position: relative; padding: 64px 0 40px; text-align: center;
+  background:
+    radial-gradient(600px 300px at 15% 0%, #1fb3a526, transparent 70%),
+    radial-gradient(600px 300px at 85% 10%, #3fb6ff1f, transparent 70%),
+    radial-gradient(500px 260px at 50% 100%, #ffad3a14, transparent 70%);
+}
+.logo { width: 88px; height: 88px; filter: drop-shadow(0 10px 30px #0008); }
+h1 {
+  font-size: clamp(40px, 7vw, 64px); line-height: 1.05; margin: 16px 0 10px; letter-spacing: -1px;
+  background: linear-gradient(90deg, var(--teal), var(--sky) 60%, var(--orange));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.tag { font-size: clamp(18px, 2.6vw, 22px); color: var(--text); margin: 0 auto 8px; max-width: 640px; }
+.sub { color: var(--dim); margin: 0 auto 28px; max-width: 680px; }
+.btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: 10px;
+  font-weight: 600; border: 1px solid var(--line); color: var(--text); background: var(--card);
+}
+.btn:hover { text-decoration: none; border-color: var(--teal); }
+.btn.go { background: linear-gradient(135deg, #0f7d73, #1fb3a5); border-color: #1fb3a5; color: #fff; box-shadow: 0 8px 24px #1fb3a533; }
+.btn.go:hover { filter: brightness(1.08); }
+.meta { margin-top: 14px; color: var(--faint); font-size: 14px; }
+.pill { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--orange); border: 1px solid #ffad3a55; background: #ffad3a14; border-radius: 99px; padding: 2px 10px; margin-bottom: 10px; }
+
+.shot {
+  margin: 40px auto 0; max-width: 960px; border-radius: 12px; overflow: hidden;
+  border: 1px solid var(--line); box-shadow: 0 30px 80px #000a, 0 0 0 6px #ffffff06; background: #fff;
+}
+.shot img { display: block; width: 100%; height: auto; }
+.bar { height: 30px; background: #1b242c; display: flex; align-items: center; gap: 7px; padding: 0 12px; border-bottom: 1px solid var(--line); }
+.bar i { width: 11px; height: 11px; border-radius: 50%; background: #ff5f57; flex: none; }
+.bar i:nth-child(2) { background: #febc2e; } .bar i:nth-child(3) { background: #28c840; }
+.bar span { margin-left: 8px; color: var(--faint); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+figure { margin: 0; }
+figcaption { color: var(--faint); font-size: 14px; margin-top: 10px; text-align: center; }
+
+/* ---- sections ---- */
+section { padding: 64px 0; }
+section.alt { background: var(--bg2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+h2 { font-size: 30px; margin: 0 0 8px; letter-spacing: -.3px; }
+.lead { color: var(--dim); margin: 0 0 32px; max-width: 720px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px;
+  border-top: 3px solid var(--c);
+}
+.card h3 { margin: 0 0 6px; font-size: 17px; display: flex; align-items: center; gap: 10px; }
+.card h3 b { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-size: 15px; flex: none;
+  background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--c); }
+.card p { margin: 0; color: var(--dim); font-size: 15px; }
+
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
+@media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
+.chip { font-size: 13px; padding: 3px 10px; border-radius: 6px; font-weight: 600;
+  color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); }
+
+/* signal-flow diagram */
+.flow { display: grid; grid-template-columns: 1fr auto 1.1fr auto 1fr; gap: 14px; align-items: center; }
+.flow .col { display: grid; gap: 8px; }
+.node { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-size: 15px; }
+.node small { display: block; color: var(--faint); font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+.node.hub { border: 2px solid var(--teal); text-align: center; padding: 22px 16px; }
+.node.hub b { font-size: 20px; color: var(--teal); }
+.node.hub span { display: block; color: var(--dim); font-size: 14px; }
+.node.radio { border-left: 3px solid var(--orange); }
+.arrow { color: var(--faint); font-size: 22px; text-align: center; }
+@media (max-width: 760px) {
+  .flow { grid-template-columns: 1fr; }
+  .arrow { transform: rotate(90deg); }
+}
+
+/* steps with screenshots */
+.step { display: grid; grid-template-columns: 1fr 1.2fr; gap: 32px; align-items: center; margin-bottom: 36px; }
+.step:last-child { margin-bottom: 0; }
+.step h3 { margin: 0 0 8px; font-size: 20px; }
+.step p, .step li { color: var(--dim); }
+.step ul { padding-left: 20px; margin: 8px 0 0; }
+.step img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); box-shadow: 0 16px 40px #0008; display: block; }
+@media (max-width: 760px) { .step { grid-template-columns: 1fr; gap: 16px; } }
+
+.note { background: #ffad3a10; border: 1px solid #ffad3a44; border-radius: 12px; padding: 16px 20px; color: var(--dim); font-size: 15px; margin-top: 28px; }
+.note b { color: var(--orange); }
+
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--dim); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; }
+td:first-child { color: var(--text); font-weight: 600; white-space: nowrap; }
+td { color: var(--dim); }
+.tbl { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow-x: auto; }
+
+pre { background: #0b0f12; border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; overflow-x: auto; margin: 0 0 16px; color: #cfeee9; }
+pre .c { color: var(--faint); }
+
+.tested { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.tested div { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.tested b { display: block; }
+.tested span { color: var(--dim); font-size: 14px; }
+.ok { color: var(--on); } .todo { color: var(--orange); } .no { color: var(--bad); }
+
+footer { padding: 36px 0 48px; color: var(--faint); font-size: 14px; text-align: center; }
+footer img { width: 28px; vertical-align: middle; margin-right: 6px; border-radius: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <img class="logo" src="icon.svg" alt="">
+    <h1>SliceTCI</h1>
+    <p class="tag">One connection instead of CAT + DAX.</p>
+    <p class="sub">A TCI server for FlexRadio on Windows. Point WSJT-X, JTDX or any TCI client at a localhost port and it controls a slice and gets its audio straight from the radio over the network. No serial ports, no virtual audio cables, and no SmartSDR DAX.</p>
+    <span class="pill">Version 0.6 · formerly FlexTCI · open source</span>
+    <div class="btns">
+      <a class="btn go" href="https://github.com/va3mw/SliceTCI/releases/latest">⬇ Download for Windows</a>
+      <a class="btn" href="#setup">WSJT-X setup</a>
+      <a class="btn" href="https://github.com/va3mw/SliceTCI#readme">Full instructions</a>
+      <a class="btn" href="https://github.com/va3mw/SliceTCI">View on GitHub</a>
+    </div>
+    <div class="meta">Windows 10/11 · one .exe, no installer · needs SmartSDR running · one TCI port per slice, up to 8 · free, MIT licensed</div>
+    <div class="shot">
+      <div class="bar"><i></i><i></i><i></i><span>WSJT-X 3.0 decoding FT8 through SliceTCI on a FLEX-6600M</span></div>
+      <img src="SliceTCIserver.png" width="1621" height="964" alt="WSJT-X 3.0 decoding FT8 with its Radio settings set to TCI Client RX1 on 127.0.0.1:50001, next to the SliceTCI window showing a FLEX-6600M, slice A on 14.074 MHz DIGU and a connected client with audio">
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>What it does</h2>
+    <p class="lead">TCI puts rig control and audio on a single WebSocket. SliceTCI speaks TCI to your programs on one side and the SmartSDR API and DAX streams to your FlexRadio on the other.</p>
+    <div class="grid">
+      <div class="card" style="--c: var(--teal)"><h3><b>⇄</b>One port per slice</h3><p>Slice A on port 50001 with DAX 1, Slice B on 50002 with DAX 2, and so on, up to eight. Each WSJT-X or JTDX instance gets its own slice. Several clients can share a port, for example WSJT-X and a logger, and they stay in sync.</p></div>
+      <div class="card" style="--c: var(--sky)"><h3><b>∿</b>Audio straight from the radio</h3><p>Receive and transmit audio travel as DAX streams over the network, resampled to whatever the client asks for. SmartSDR DAX and the Windows DAX sound devices aren't needed. Each channel has its own RX level.</p></div>
+      <div class="card" style="--c: var(--orange)"><h3><b>⏻</b>Safe transmit</h3><p>Only one client can transmit at a time. The radio unkeys if that client disconnects, crashes or stops sending audio. Transmit started in SmartSDR is never dropped by a client.</p></div>
+      <div class="card" style="--c: var(--on)"><h3><b>✓</b>Gets the slice ready</h3><p>When a client transmits its own audio, a slice left in USB or LSB is switched to DIGU or DIGL, and TX DAX is turned on if it was off, so the audio reaches the transmitter. You can turn this off.</p></div>
+      <div class="card" style="--c: var(--violet)"><h3><b>⌖</b>Spots on the panadapter</h3><p>TCI spots from your client show on the SmartSDR panadapter and clear themselves after 15 minutes. Click one in SmartSDR and every TCI client is told. Your cluster and N1MM spots are left alone.</p></div>
+      <div class="card" style="--c: var(--sky)"><h3><b>☰</b>A log you can read</h3><p>Filter by level or text, and optionally capture every TCI and radio API line. Each transmission logs a summary of how long it was keyed and how much audio arrived. Logs are kept daily.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>How it fits together</h2>
+    <p class="lead">Your programs only ever talk to localhost. SliceTCI keeps the one connection to the radio.</p>
+    <div class="flow">
+      <div class="col">
+        <div class="node">WSJT-X<small>ws://127.0.0.1:50001</small></div>
+        <div class="node">JTDX<small>ws://127.0.0.1:50002</small></div>
+        <div class="node">Logger<small>ws://127.0.0.1:50001</small></div>
+      </div>
+      <div class="arrow">⇄</div>
+      <div class="node hub"><b>SliceTCI</b><span>one TCI port per slice</span></div>
+      <div class="arrow">⇄</div>
+      <div class="col">
+        <div class="node radio">Slice control<small>TCP 4992 · SmartSDR API</small></div>
+        <div class="node radio">Receive audio<small>UDP · DAX RX stream per slice</small></div>
+        <div class="node radio">Transmit audio<small>UDP · DAX TX stream</small></div>
+      </div>
+    </div>
+    <p class="lead" style="margin: 28px 0 0">SmartSDR, or another GUI client, must be running because it owns the slices. In multiFLEX, SliceTCI binds to the station you choose, so "Slice A" means <em>that station's</em> Slice A.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Getting started</h2>
+    <p class="lead">Settings and logs live in <code>%APPDATA%\SliceTCI</code>.</p>
+    <div class="grid">
+      <div class="card" style="--c: var(--teal)"><h3><b>1</b>Download and run</h3><p>Get <code>SliceTCI-&lt;version&gt;.exe</code> from the latest release and run it. Windows SmartScreen may ask once because the exe isn't code-signed: choose <b>More info › Run anyway</b>. Allow it through Windows Firewall, since the radio's audio arrives over UDP.</p></div>
+      <div class="card" style="--c: var(--sky)"><h3><b>2</b>Pick your radio</h3><p>With SmartSDR running, choose your station. The default is one channel: Slice A on port 50001 with DAX 1. Add a channel for each extra slice you want to use.</p></div>
+      <div class="card" style="--c: var(--orange)"><h3><b>3</b>Keep it tidy</h3><p><b>Settings › Install in AppData</b> moves the exe next to its settings and adds a desktop shortcut. <b>Check for updates</b> fetches a new release, verifies it, and restarts.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="setup">
+  <div class="wrap">
+    <h2>Setting up WSJT-X</h2>
+    <p class="lead">Two tabs in WSJT-X Settings. JTDX is the same idea.</p>
+
+    <div class="step">
+      <div>
+        <h3>1 · Radio</h3>
+        <ul>
+          <li>Rig: <b>TCI Client RX1</b></li>
+          <li>TCI Server: <code>127.0.0.1:50001</code> (the channel's port)</li>
+          <li>PTT method: <b>CAT</b></li>
+          <li>Mode: <b>None</b>. SliceTCI switches to DIGU/DIGL itself when transmitting.</li>
+          <li>Split operation: <b>None</b> or <b>Fake It</b></li>
+        </ul>
+      </div>
+      <img src="TCI-Rig.png" width="795" height="669" alt="WSJT-X Settings, Radio tab: Rig TCI Client RX1, TCI server 127.0.0.1:50001, PTT method CAT, Mode None, Split None" loading="lazy">
+    </div>
+
+    <div class="step">
+      <div>
+        <h3>2 · Audio</h3>
+        <ul>
+          <li>Tick <b>Use TCI Audio (restart required)</b></li>
+          <li>Set Input and Output to <b>TCI audio</b></li>
+          <li>Restart WSJT-X</li>
+          <li>Set the receive level with SliceTCI's <b>RX dB</b> for the channel, aiming for about 30 dB on the WSJT-X meter.</li>
+        </ul>
+      </div>
+      <img src="TCI-Audio.png" width="800" height="674" alt="WSJT-X Settings, Audio tab with Use TCI Audio ticked and Input and Output both set to TCI audio" loading="lazy">
+    </div>
+
+    <p class="lead" style="margin: 0">For a second slice, start another instance with <code>wsjtx --rig-name=SliceB</code> and point it at port 50002. WSJT-X currently handles at most two TCI clients at once, so plan on two WSJT-X instances at most.</p>
+
+    <div class="note"><b>Rig Control Error at start-up?</b> WSJT-X may say <em>TCI audio cannot be started as frequency is OOB</em> even when the slice is on a normal frequency. It's a timing race inside WSJT-X, not a SliceTCI fault. Click <b>Retry</b>, or open WSJT-X Settings and close it with <b>OK</b>, and it works normally.</div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap split">
+    <div>
+      <h2>Kept on your PC</h2>
+      <p class="lead" style="margin-bottom: 18px">TCI has no password, so SliceTCI keeps it local. TCI ports listen on localhost only, never on your network. Connections from web pages are refused, so a website you visit can't open your radio. Audio is accepted only from the radio's own address.</p>
+    </div>
+    <div>
+      <h2>Remote radios</h2>
+      <p class="lead" style="margin-bottom: 18px">It works over a VPN or Tailscale too. The audio is UDP, which doesn't resend lost packets, so a poor link can mean fewer decodes or gaps in transmitted audio. A wired, low-latency connection gives the best results. SmartLink isn't supported yet.</p>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>Tested so far</h2>
+    <p class="lead">Here's where it stands.</p>
+    <div class="tested">
+      <div><b class="ok">Working</b><span>FLEX-6600M with WSJT-X 3.0 and JTDX, each on its own port and slice. AU-520 on SmartSDR v4.3.16 with WSJT-X improved 3.0.2.</span></div>
+      <div><b class="todo">Still to check</b><span>MSHV and Log4OM, and the TX level that gives full rated power.</span></div>
+      <div><b class="no">Not yet</b><span>Split (VFO B as TX), CW macros, meters, IQ and SmartLink. A slice that isn't the TX slice doesn't follow a band change made outside SliceTCI.</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>TCI coverage</h2>
+    <p class="lead">Phase 1 of the TCI requirements draft. Commands outside this list are ignored and logged once.</p>
+    <div class="tbl">
+      <table>
+        <tr><th>Area</th><th>Commands</th></tr>
+        <tr><td>Start-up</td><td><code>protocol</code>, <code>device</code>, <code>trx_count</code>, <code>vfo_limits</code>, <code>modulations_list</code> (from the radio's own mode list), full state, <code>ready</code></td></tr>
+        <tr><td>Tuning</td><td><code>vfo</code>, <code>modulation</code>, <code>rx_filter_band</code>, <code>rit_*</code>, <code>xit_*</code>; <code>dds</code> and <code>if</code> read-only</td></tr>
+        <tr><td>Transmit</td><td><code>trx</code> (including TCI audio), <code>tune</code>, <code>drive</code>, <code>tune_drive</code>, <code>tx_enable</code></td></tr>
+        <tr><td>Audio</td><td>8, 12, 24 and 48 kHz; sample type, channels and block size as the client asks; TX_CHRONO pull model</td></tr>
+        <tr><td>Spots</td><td><code>spot</code>, <code>spot_delete</code>, <code>spot_clear</code> in; <code>clicked_on_spot</code> out</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>Build from source</h2>
+    <p class="lead">Go with <a href="https://wails.io">Wails</a> for the window. The interface is one plain HTML file, so there's no Node.js build step and no C compiler.</p>
+<pre><span class="c"># tests, including end-to-end runs against a fake radio</span>
+go test ./...
+
+<span class="c"># Windows exe in build\bin</span>
+wails build</pre>
+    <div class="chips">
+      <span class="chip" style="--c: var(--sky)">Go</span>
+      <span class="chip" style="--c: var(--violet)">Wails</span>
+      <span class="chip" style="--c: var(--teal)">TCI</span>
+      <span class="chip" style="--c: var(--orange)">SmartSDR API</span>
+      <span class="chip" style="--c: var(--on)">VITA-49 DAX</span>
+      <span class="chip" style="--c: var(--orange)">MIT</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <img src="icon.png" alt="">Made by Mike VA3MW and Claude · <a href="https://github.com/va3mw/SliceTCI">github.com/va3mw/SliceTCI</a><br>
+    MIT licensed · Not affiliated with FlexRadio Systems. FlexRadio and SmartSDR are trademarks of FlexRadio Systems. WSJT-X is by K1JT and the WSJT Development Group.
+  </div>
+</footer>
+
+</body>
+</html>
