@@ -134,3 +134,7 @@ tools/mkicon             draws the icon (build/appicon.png, build/windows/icon.i
 * `PROTOCOL` reports `ExpertSDR3,2.0` by default for client compatibility (OI-23). You can change it in the UI.
 * A slice that is **not** the TX slice does not follow a band change made outside SliceTCI, because the radio reports no new frequency for it. Reconnect the client if that happens.
 * Tested on a FLEX-6600M (WSJT-X 3.0 and JTDX, each on its own port and slice, with JTDX set as TCI Client RX2) and on an AU-520 with SmartSDR v4.3.16 (WSJT-X improved 3.0.2). MSHV and Log4OM are still to be tested. Use the traffic log to capture sessions.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
