@@ -11,7 +11,11 @@ import (
 )
 
 // MaxChannels is the hard upper bound on TCI channels (one port per slice).
-const MaxChannels = 8
+const MaxChannels = 2
+
+// MaxSlices is the number of slice letters a channel can use (A-H), which is
+// more than MaxChannels: two channels may sit on any two of the radio's slices.
+const MaxSlices = 8
 
 // Limits shared by validation (the UI) and normalize (a hand-edited file).
 const (
@@ -121,7 +125,7 @@ func Default() *Config {
 func (c Config) ValidateChannels() error {
 	ports := map[int]int{}
 	slices := map[string]int{}
-	last := byte('A' + MaxChannels - 1)
+	last := byte('A' + MaxSlices - 1)
 	for i := 0; i < c.ChannelCount; i++ {
 		ch := c.Channels[i]
 		if ch.Port < 1024 || ch.Port > 65535 {

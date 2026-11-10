@@ -310,7 +310,7 @@ function renderList(s) {
     el.querySelector(".pills").innerHTML = pills.join("");
   }
   $("btnRemove").disabled = n <= 1;
-  $("btnAdd").disabled = n >= 8;
+  $("btnAdd").disabled = n >= 2; // config.MaxChannels
 }
 
 function onStatus(s) {

@@ -133,7 +133,7 @@ func (a *App) AddChannel() error {
 		return false
 	}
 	var nc config.Channel
-	for i := 0; i < config.MaxChannels; i++ {
+	for i := 0; i < config.MaxSlices; i++ {
 		l := string(rune('A' + i))
 		if !used(func(x config.Channel) bool { return x.Slice == l }) {
 			nc = config.DefaultChannel(i)

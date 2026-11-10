@@ -24,6 +24,32 @@ func TestLoadFlatOptions(t *testing.T) {
 	}
 }
 
+// TestTwoChannelLimit: a config saved with more channels than MaxChannels
+// loads with the first two, and a channel may still use any slice letter A-H.
+func TestTwoChannelLimit(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.json")
+	old := `{"channel_count":4,"channels":[
+		{"slice":"C","port":50001,"dax":1},{"slice":"B","port":50002,"dax":2},
+		{"slice":"A","port":50003,"dax":3},{"slice":"D","port":50004,"dax":4}]}`
+	if err := os.WriteFile(p, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := LoadFrom(p).Get()
+	if c.ChannelCount != 2 || len(c.Channels) != 2 {
+		t.Fatalf("got %d active of %d channels, want 2 of 2", c.ChannelCount, len(c.Channels))
+	}
+	if c.Channels[0].Slice != "C" || c.Channels[1].Slice != "B" {
+		t.Fatalf("kept the wrong channels: %+v", c.Channels)
+	}
+	if err := c.ValidateChannels(); err != nil {
+		t.Fatalf("Slice C should be allowed: %v", err)
+	}
+	c.Channels[1].Slice = "I"
+	if err := c.ValidateChannels(); err == nil {
+		t.Fatal("Slice I was accepted")
+	}
+}
+
 // TestMigrateLegacyDir: settings from before the rename (FlexTCI) move to
 // the SliceTCI folder, and an existing SliceTCI folder is left alone.
 func TestMigrateLegacyDir(t *testing.T) {
