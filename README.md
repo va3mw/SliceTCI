@@ -18,6 +18,14 @@ To keep it in one place:
 
 SliceTCI also checks once at start-up and notes an available update in the log; it never installs without asking. Update checks only work while the repository is public: GitHub answers 404 for a private one, and SliceTCI reports "no public release found".
 
+### Running several copies of WSJT-X
+
+Several copies of WSJT-X can run at the same time by starting each with the `--rig-name` switch, as explained in the WSJT-X user documentation. Each copy must use its own TCI port, one per slice: for example Slice A on `127.0.0.1:50001`, Slice B on `127.0.0.1:50002`, and so on. Add a SliceTCI channel for each slice first.
+
+![Two WSJT-X copies, one set to TCI Server 127.0.0.1:50001 and the other to 127.0.0.1:50002](networksetup.png)
+
+[This video](https://youtu.be/mfA3jJSVtgU?si=5zD4stqse5kcwa_V) shows the idea. It uses DAX; with SliceTCI, set each copy's audio to **TCI audio** instead.
+
 ## How it works
 
 ```
@@ -28,8 +36,8 @@ Log4OM ──ws://127.0.0.1:50001──┘   per slice)         └── UDP  �
 
 **Audio** comes straight from the radio. SliceTCI registers a UDP port with `client udpport` and opens a `dax_rx` stream for each channel's DAX channel. It opens a `dax_tx` stream for transmit, taking DAX TX ownership with `stream set … tx=1`. RX arrives as float32 stereo at the slice's `sample_rate` (24 kHz on a 6600M) and is resampled to whatever the TCI client asked for. TX goes out in 128-frame packets paced to the TX slice's rate. The streams are recreated after a reconnect. Windows Firewall must allow SliceTCI to receive UDP. Each channel has an RX gain (default 0 dB, the same level as the DAX app's RX slider at its default of 50), and there is one TX gain (default −6 dB, the same as DAX TX at 50). Up to 0.6.2 the RX default was −40 dB; a channel whose gain was never changed now starts 40 dB louder, so check the level once after updating.
 
-* **One TCI port per slice, up to 2 slices.** Each channel is a port, a slice letter, a DAX channel and an RX gain. The defaults are Slice A → port 50001 → DAX 1 and Slice B → 50002 → DAX 2. Each WSJT-X or JTDX instance uses **TCI Client RX1** on its own port. A client set to RX2 also works: every receiver index on a port maps to that port's slice.
-* You can run 1 or 2 channels (the default is 1). Several clients can share a port (for example WSJT-X and a logger on the same slice), and they are kept in sync.
+* **One TCI port per slice.** Each channel is a port, a slice letter, a DAX channel and an RX gain. The defaults are Slice A → port 50001 → DAX 1 and Slice B → 50002 → DAX 2. Each WSJT-X or JTDX instance uses **TCI Client RX1** on its own port. A client set to RX2 also works: every receiver index on a port maps to that port's slice.
+* You can run as many channels as the radio has slices: 2, 4 or 8 depending on the model (the radio reports it; the default is 1 channel). Several clients can share a port (for example WSJT-X and a logger on the same slice), and they are kept in sync.
 * SmartSDR (or another GUI station) must be running, because it owns the slices. SmartSDR DAX is not needed. SliceTCI binds to the station you pick, so in multiFLEX "Slice A" means *that station's* Slice A.
 * When a client connects, the slice's DAX channel is set to match its assignment. You can turn this off in Settings (**Set the slice's DAX channel when a client connects**).
 * **Band changes.** After a tune to another band, whether from a TCI client or a band button in SmartSDR/Maestro, the radio does not send the slice's new `RF_frequency`; it only reports `transmit freq=` (seen on an AU-520 with v4.3.16). SliceTCI applies that to the TX slice, so clients follow band changes on the transmit slice. See the open items for other slices.

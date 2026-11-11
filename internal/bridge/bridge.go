@@ -670,13 +670,35 @@ type Status struct {
 	TXOwner  string           `json:"tx_owner"`
 	TXLevel  float32          `json:"tx_level"` // peak TX audio since the last status
 	Config   config.Config    `json:"config"`
+	// SliceLimit is how many channels the connected (or last) radio can
+	// serve: its slice count, at most config.MaxChannels.
+	SliceLimit int `json:"slice_limit"`
+}
+
+// SliceLimit is the most channels worth adding: the radio's slice count from
+// discovery, else from its model name, else config.MaxChannels.
+func (b *Bridge) SliceLimit() int {
+	n := 0
+	if r, ok := b.disc.Find(b.cfg.Get().RadioSerial); ok {
+		n = r.MaxSlices
+		if n == 0 {
+			n = flex.ModelMaxSlices(r.Model)
+		}
+	}
+	if n == 0 {
+		n = flex.ModelMaxSlices(b.radio.Snapshot().Model)
+	}
+	if n <= 0 || n > config.MaxChannels {
+		n = config.MaxChannels
+	}
+	return n
 }
 
 // Status reports the bridge state for the UI. Level meters report the peak
 // since the last reset; resetMeters starts a new measuring period, and only
 // the periodic push should set it.
 func (b *Bridge) Status(resetMeters bool) Status {
-	st := Status{Radio: b.radio.Snapshot(), Radios: b.disc.List(), Config: b.cfg.Get()}
+	st := Status{Radio: b.radio.Snapshot(), Radios: b.disc.List(), Config: b.cfg.Get(), SliceLimit: b.SliceLimit()}
 	if resetMeters {
 		st.TXLevel = math.Float32frombits(b.txPeak.Swap(0))
 	} else {

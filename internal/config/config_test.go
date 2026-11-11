@@ -24,9 +24,9 @@ func TestLoadFlatOptions(t *testing.T) {
 	}
 }
 
-// TestTwoChannelLimit: a config saved with more channels than MaxChannels
-// loads with the first two, and a channel may still use any slice letter A-H.
-func TestTwoChannelLimit(t *testing.T) {
+// TestChannelLimit: a config saved with four channels (as 0.6.2's 2-channel
+// cap would have trimmed) loads with all four, and slice letters stop at H.
+func TestChannelLimit(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "config.json")
 	old := `{"channel_count":4,"channels":[
 		{"slice":"C","port":50001,"dax":1},{"slice":"B","port":50002,"dax":2},
@@ -35,8 +35,8 @@ func TestTwoChannelLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := LoadFrom(p).Get()
-	if c.ChannelCount != 2 || len(c.Channels) != 2 {
-		t.Fatalf("got %d active of %d channels, want 2 of 2", c.ChannelCount, len(c.Channels))
+	if c.ChannelCount != 4 || len(c.Channels) != MaxChannels {
+		t.Fatalf("got %d active of %d channels, want 4 of %d", c.ChannelCount, len(c.Channels), MaxChannels)
 	}
 	if c.Channels[0].Slice != "C" || c.Channels[1].Slice != "B" {
 		t.Fatalf("kept the wrong channels: %+v", c.Channels)

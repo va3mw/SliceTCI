@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"net"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,7 +23,10 @@ type RadioInfo struct {
 	Version  string `json:"version"`
 	Status   string `json:"status"`
 	Stations string `json:"stations"`
-	lastSeen time.Time
+	// MaxSlices is how many slices the radio supports (discovery's
+	// max_slices); 0 if it did not say.
+	MaxSlices int `json:"max_slices"`
+	lastSeen  time.Time
 }
 
 // Discovery listens for FlexRadio VITA-49 discovery packets on UDP 4992.
@@ -198,15 +202,39 @@ func parseDiscovery(b []byte) *RadioInfo {
 		return nil
 	}
 	return &RadioInfo{
-		Serial:   kv["serial"],
-		Model:    kv["model"],
-		Nickname: unescape(kv["nickname"]),
-		Callsign: kv["callsign"],
-		IP:       kv["ip"],
-		Version:  kv["version"],
-		Status:   kv["status"],
-		Stations: unescape(kv["gui_client_stations"]),
+		Serial:    kv["serial"],
+		Model:     kv["model"],
+		Nickname:  unescape(kv["nickname"]),
+		Callsign:  kv["callsign"],
+		IP:        kv["ip"],
+		Version:   kv["version"],
+		Status:    kv["status"],
+		Stations:  unescape(kv["gui_client_stations"]),
+		MaxSlices: atoiOr0(kv["max_slices"]),
 	}
+}
+
+func atoiOr0(s string) int {
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
+// ModelMaxSlices is the slice count for a model name, for when discovery
+// does not report max_slices. It returns 0 for an unknown model.
+func ModelMaxSlices(model string) int {
+	m := strings.ToUpper(model)
+	switch {
+	case strings.Contains(m, "6700"):
+		return 8
+	case strings.Contains(m, "6500"), strings.Contains(m, "6600"), strings.Contains(m, "8600"):
+		return 4
+	case strings.Contains(m, "6300"), strings.Contains(m, "6400"), strings.Contains(m, "8400"):
+		return 2
+	}
+	return 0
 }
 
 // ParseKV splits "a=1 b=2 c" into a map. Bare words map to "".

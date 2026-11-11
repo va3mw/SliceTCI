@@ -11,10 +11,10 @@ import (
 )
 
 // MaxChannels is the hard upper bound on TCI channels (one port per slice).
-const MaxChannels = 2
+// The connected radio sets the real limit: 2, 4 or 8 slices by model.
+const MaxChannels = 8
 
-// MaxSlices is the number of slice letters a channel can use (A-H), which is
-// more than MaxChannels: two channels may sit on any two of the radio's slices.
+// MaxSlices is the number of slice letters a channel can use (A-H).
 const MaxSlices = 8
 
 // Limits shared by validation (the UI) and normalize (a hand-edited file).

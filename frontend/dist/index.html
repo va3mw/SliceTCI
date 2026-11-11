@@ -310,7 +310,9 @@ function renderList(s) {
     el.querySelector(".pills").innerHTML = pills.join("");
   }
   $("btnRemove").disabled = n <= 1;
-  $("btnAdd").disabled = n >= 2; // config.MaxChannels
+  const lim = s.slice_limit || 8; // the radio's slice count, at most config.MaxChannels
+  $("btnAdd").disabled = n >= lim;
+  $("btnAdd").title = n >= lim ? `This radio has ${lim} slices` : "";
 }
 
 function onStatus(s) {

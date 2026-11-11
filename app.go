@@ -136,8 +136,8 @@ func (a *App) ResetChannel(i int) error {
 // DAX channel.
 func (a *App) AddChannel() error {
 	c := a.cfg.Get()
-	if c.ChannelCount >= config.MaxChannels {
-		return fmt.Errorf("at most %d channels", config.MaxChannels)
+	if lim := a.bridge.SliceLimit(); c.ChannelCount >= lim {
+		return fmt.Errorf("this radio has %d slices, so at most %d channels", lim, lim)
 	}
 	used := func(f func(config.Channel) bool) bool {
 		for i := 0; i < c.ChannelCount; i++ {

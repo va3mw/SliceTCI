@@ -173,7 +173,7 @@ footer img { width: 28px; vertical-align: middle; margin-right: 6px; border-radi
       <a class="btn" href="https://github.com/va3mw/SliceTCI#readme">Full instructions</a>
       <a class="btn" href="https://github.com/va3mw/SliceTCI">View on GitHub</a>
     </div>
-    <div class="meta">Windows 10/11 · one .exe, no installer · needs SmartSDR running · one TCI port per slice, up to 2 slices · free, MIT licensed<br>Not a product of FlexRadio Systems</div>
+    <div class="meta">Windows 10/11 · one .exe, no installer · needs SmartSDR running · one TCI port per slice, 2–8 slices by radio model · free, MIT licensed<br>Not a product of FlexRadio Systems</div>
     <div class="shot">
       <div class="bar"><i></i><i></i><i></i><span>Two slices, two WSJT-X instances: FT8 on Slice A, FT4 on Slice B</span></div>
       <img src="two-slices.png" width="2063" height="1003" alt="Two WSJT-X windows decoding at once through SliceTCI 0.6.1 on an AU-520: FT8 on 14.074 MHz using Slice A on port 50001, and FT4 on 14.080 MHz using Slice B on port 50002">
@@ -186,7 +186,7 @@ footer img { width: 28px; vertical-align: middle; margin-right: 6px; border-radi
     <h2>What it does</h2>
     <p class="lead">TCI puts rig control and audio on a single WebSocket. SliceTCI speaks TCI to your programs on one side and the SmartSDR API and DAX streams to your FlexRadio on the other.</p>
     <div class="grid">
-      <div class="card" style="--c: var(--teal)"><h3><b>⇄</b>One port per slice</h3><p>Up to two slices: Slice A on port 50001 with DAX 1, and Slice B on 50002 with DAX 2. Each WSJT-X or JTDX instance gets its own slice. Several clients can share a port, for example WSJT-X and a logger, and they stay in sync.</p></div>
+      <div class="card" style="--c: var(--teal)"><h3><b>⇄</b>One port per slice</h3><p>As many slices as your radio has (2, 4 or 8): Slice A on port 50001 with DAX 1, Slice B on 50002 with DAX 2, and so on. Each WSJT-X or JTDX instance gets its own slice. Several clients can share a port, for example WSJT-X and a logger, and they stay in sync.</p></div>
       <div class="card" style="--c: var(--sky)"><h3><b>∿</b>Audio straight from the radio</h3><p>Receive and transmit audio travel as DAX streams over the network, resampled to whatever the client asks for. SmartSDR DAX and the Windows DAX sound devices aren't needed. Each channel has its own RX level.</p></div>
       <div class="card" style="--c: var(--orange)"><h3><b>⏻</b>Safe transmit</h3><p>Only one client can transmit at a time. The radio unkeys if that client disconnects, crashes or stops sending audio. Transmit started in SmartSDR is never dropped by a client.</p></div>
       <div class="card" style="--c: var(--on)"><h3><b>✓</b>Gets the slice ready</h3><p>When a client transmits its own audio, a slice left in USB or LSB is switched to DIGU or DIGL, and TX DAX is turned on if it was off, so the audio reaches the transmitter. You can turn this off.</p></div>
