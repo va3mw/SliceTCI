@@ -19,7 +19,7 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-const version = "0.6.3"
+const version = "0.6.4"
 
 // waitPIDFlag is passed to a restarted SliceTCI (after install or update) so
 // it waits for the previous instance to exit before starting.
