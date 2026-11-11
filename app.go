@@ -21,6 +21,7 @@ type App struct {
 	log    *logx.Logger
 	cfg    *config.Store
 	bridge *bridge.Bridge
+	hwnd   uintptr // main window, found on first use (window_windows.go)
 
 	logMu  sync.Mutex
 	logBuf []logx.Entry
@@ -44,7 +45,21 @@ func (a *App) startup(ctx context.Context) {
 	go a.startupChecks()
 }
 
+// domReady puts the window back where it was last closed, then shows it
+// (it starts hidden so it does not flash in the centre first).
+func (a *App) domReady(ctx context.Context) {
+	a.restoreWindow()
+	runtime.WindowShow(ctx)
+}
+
+// beforeClose saves the window position; it never blocks closing.
+func (a *App) beforeClose(context.Context) bool {
+	a.saveWindow()
+	return false
+}
+
 func (a *App) shutdown(context.Context) {
+	a.saveWindow() // also covers runtime.Quit (restart after install/update)
 	a.log.Log(logx.Info, "app", "shutting down")
 	a.bridge.Shutdown()
 	a.log.Close()

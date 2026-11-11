@@ -46,10 +46,9 @@ const DefaultTXGainDB = -6
 // under a minute; five minutes still allows long RTTY/SSB overs.
 const DefaultMaxTXSeconds = 300
 
-// DefaultRXGainDB brings the radio's full-scale DAX stream down to the level
-// digital-mode apps expect (WSJT-X wants roughly 30 dB on its meter; the raw
-// stream reads about 76 dB).
-const DefaultRXGainDB = -40
+// DefaultRXGainDB is unity gain, the same level SmartSDR's DAX app gives at
+// its default RX slider of 50 (reported by K0VM).
+const DefaultRXGainDB = 0
 
 // RXGain returns the channel's RX gain in dB.
 func (c Channel) RXGain() int {
@@ -92,14 +91,24 @@ func (o Options) Validate() error {
 }
 
 type Config struct {
-	RadioIP      string    `json:"radio_ip"`     // last radio, or manual IP
-	RadioSerial  string    `json:"radio_serial"` // last radio picked from discovery
-	Station      string    `json:"station"`      // SmartSDR station name to bind to
-	ChannelCount int       `json:"channel_count"`
-	Channels     []Channel `json:"channels"`
-	TXGainDB     int       `json:"tx_gain_db"` // TX audio trim
-	AutoConnect  bool      `json:"auto_connect"`
+	RadioIP      string      `json:"radio_ip"`     // last radio, or manual IP
+	RadioSerial  string      `json:"radio_serial"` // last radio picked from discovery
+	Station      string      `json:"station"`      // SmartSDR station name to bind to
+	ChannelCount int         `json:"channel_count"`
+	Channels     []Channel   `json:"channels"`
+	TXGainDB     int         `json:"tx_gain_db"` // TX audio trim
+	AutoConnect  bool        `json:"auto_connect"`
+	Window       *WindowRect `json:"window,omitempty"` // last window position; nil = centred
 	Options
+}
+
+// WindowRect is the main window's normal (not minimised or maximised)
+// position in Windows workspace coordinates, physical pixels.
+type WindowRect struct {
+	Left   int32 `json:"left"`
+	Top    int32 `json:"top"`
+	Right  int32 `json:"right"`
+	Bottom int32 `json:"bottom"`
 }
 
 func Default() *Config {

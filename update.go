@@ -83,8 +83,9 @@ func newerVersion(a, b string) bool {
 	return false
 }
 
-// downloadUpdate saves the new exe next to exePath as <exe>.new and checks
-// its SHA-256 against the published one.
+// downloadUpdate saves the new exe as <exePath>.new (a temp-folder name, since
+// Program Files is not writable) and checks its SHA-256 against the
+// published one.
 func downloadUpdate(info updateInfo, exePath string) (string, error) {
 	resp, err := (&http.Client{Timeout: 5 * time.Minute}).Get(info.URL)
 	if err != nil {

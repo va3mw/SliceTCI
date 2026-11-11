@@ -178,7 +178,7 @@ input[type=number] { width: 72px; }
     <div class="group">
       <b>Install &amp; updates</b>
       <div class="hint" id="installLine"></div>
-      <button class="btn" id="btnInstall" title="Copy SliceTCI to the settings folder under AppData, make a desktop shortcut and restart from there">Install in AppData</button>
+      <button class="btn" id="btnInstall" title="Copy SliceTCI to C:\Program Files\SliceTCI (Windows asks for permission), make a desktop shortcut and restart from there">Install to Program Files</button>
       <div class="slider">
         <button class="btn light" id="btnShortcut" style="flex:1">Desktop shortcut</button>
         <button class="btn light" id="btnUpdate" style="flex:1">Check for updates</button>
@@ -237,7 +237,7 @@ const setOptions = (sel, items, value) => {
 const fmtFreq = hz => { const s = String(hz).padStart(7, "0"); return s.slice(0, -6) + "." + s.slice(-6, -3) + "." + s.slice(-3); };
 // Peak (0..1) to a 0..100% bar on a -60..0 dBFS scale, like DAX.
 const pct = peak => peak <= 0 ? 0 : Math.max(0, Math.min(100, (20 * Math.log10(peak) + 60) / 60 * 100));
-const gainOf = c => (c.rx_gain_db === null || c.rx_gain_db === undefined) ? -40 : c.rx_gain_db;
+const gainOf = c => (c.rx_gain_db === null || c.rx_gain_db === undefined) ? 0 : c.rx_gain_db;
 const open = id => $(id).classList.add("open");
 const close = id => $(id).classList.remove("open");
 const isOpen = id => $(id).classList.contains("open");

@@ -9,6 +9,7 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"github.com/va3mw/SliceTCI/internal/config"
 	"github.com/va3mw/SliceTCI/internal/logx"
 )
 
@@ -32,9 +33,9 @@ func (a *App) ask(title, msg string) bool {
 	return err == nil && r == "Yes"
 }
 
-// Install copies the running exe to %APPDATA%\SliceTCI, creates a desktop
-// shortcut to it and restarts from there. It returns "" if the operator
-// cancels.
+// Install copies the running exe to C:\Program Files\SliceTCI (through the
+// Windows UAC prompt), creates a desktop shortcut to it and restarts from
+// there. It returns "" if the operator cancels.
 func (a *App) Install() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -45,11 +46,12 @@ func (a *App) Install() (string, error) {
 		return "SliceTCI is already installed and running from " + filepath.Dir(dst), nil
 	}
 	if !a.ask("Install SliceTCI", "Install SliceTCI to\n\n"+filepath.Dir(dst)+"\n\n"+
-		"That folder already holds your settings and logs. A desktop shortcut is created, and SliceTCI "+
-		"restarts from the new location (TCI clients reconnect). Updates will install there too.\n\nInstall now?") {
+		"Windows asks for administrator permission to write there. Settings and logs stay in "+config.Dir()+". "+
+		"A desktop shortcut is created, and SliceTCI restarts from the new location (TCI clients reconnect). "+
+		"Updates install there too, with the same prompt.\n\nInstall now?") {
 		return "", nil
 	}
-	if err := installTo(exe, dst); err != nil {
+	if err := placeExe(exe, dst); err != nil {
 		a.log.Log(logx.Error, "app", "install failed: %v", err)
 		return "", fmt.Errorf("install failed: %w", err)
 	}
@@ -78,8 +80,9 @@ func (a *App) CreateShortcut() (string, error) {
 }
 
 // CheckForUpdates looks for a newer release on GitHub and, if the operator
-// agrees, downloads it next to the running exe, checks its SHA-256, swaps
-// it in and restarts. It returns a short result for the UI.
+// agrees, downloads it to the temp folder, checks its SHA-256, swaps it in
+// (through the UAC prompt when SliceTCI is in Program Files) and restarts.
+// It returns a short result for the UI.
 func (a *App) CheckForUpdates() (string, error) {
 	info, err := fetchRelease(releasesAPI)
 	if err != nil {
@@ -98,12 +101,12 @@ func (a *App) CheckForUpdates() (string, error) {
 		return "", err
 	}
 	a.log.Log(logx.Info, "app", "downloading SliceTCI %s", info.Version)
-	newPath, err := downloadUpdate(info, exe)
+	newPath, err := downloadUpdate(info, filepath.Join(os.TempDir(), "SliceTCI-"+info.Version+".exe"))
 	if err == nil {
-		err = swapExe(exe, newPath)
+		err = placeExe(newPath, exe)
+		os.Remove(newPath)
 	}
 	if err != nil {
-		os.Remove(exe + ".new")
 		a.log.Log(logx.Error, "app", "update failed: %v", err)
 		return "", fmt.Errorf("update failed: %w", err)
 	}
@@ -115,7 +118,10 @@ func (a *App) CheckForUpdates() (string, error) {
 // notes in the log if a newer release exists. It never installs anything.
 func (a *App) startupChecks() {
 	if exe, err := os.Executable(); err == nil {
-		cleanupOldExe(exe)
+		cleanupOldExe(exe) // fails quietly in Program Files; the installer deletes it at reboot
+		if removeLegacyExe(exe) {
+			a.log.Log(logx.Info, "app", "removed the old copy at %s", legacyExe())
+		}
 	}
 	info, err := fetchRelease(releasesAPI)
 	switch {

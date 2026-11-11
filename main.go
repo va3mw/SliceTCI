@@ -26,6 +26,9 @@ const version = "0.6.2"
 const waitPIDFlag = "-wait-pid"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == elevatedInstallFlag {
+		os.Exit(runElevatedInstall(os.Args[2:]))
+	}
 	for i, a := range os.Args {
 		if a == waitPIDFlag && i+1 < len(os.Args) {
 			if pid, err := strconv.Atoi(os.Args[i+1]); err == nil {
@@ -49,7 +52,10 @@ func main() {
 			Assets: assets,
 		},
 		BackgroundColour: &options.RGBA{R: 236, G: 236, B: 236, A: 1},
+		StartHidden:      true, // shown by OnDomReady at its saved position
 		OnStartup:        app.startup,
+		OnDomReady:       app.domReady,
+		OnBeforeClose:    app.beforeClose,
 		OnShutdown:       app.shutdown,
 		Bind:             []interface{}{app},
 		SingleInstanceLock: &options.SingleInstanceLock{

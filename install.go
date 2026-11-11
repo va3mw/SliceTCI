@@ -3,8 +3,10 @@ package main
 import (
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -13,9 +15,46 @@ import (
 
 const exeName = "SliceTCI.exe"
 
-// installedExe is where Install puts SliceTCI: %APPDATA%\SliceTCI, the folder
-// that already holds its settings and logs.
-func installedExe() string { return filepath.Join(config.Dir(), exeName) }
+// installDir is where Install puts SliceTCI: C:\Program Files\SliceTCI on
+// Windows. Settings and logs stay in %APPDATA%\SliceTCI.
+func installDir() string {
+	if runtime.GOOS != "windows" {
+		return config.Dir()
+	}
+	for _, v := range []string{"ProgramW6432", "ProgramFiles"} {
+		if d := os.Getenv(v); d != "" {
+			return filepath.Join(d, "SliceTCI")
+		}
+	}
+	return `C:\Program Files\SliceTCI`
+}
+
+func installedExe() string { return filepath.Join(installDir(), exeName) }
+
+// legacyExe is where Install put SliceTCI up to 0.6.2, next to the settings.
+func legacyExe() string { return filepath.Join(config.Dir(), exeName) }
+
+// placeExe puts src at dst like installTo. If dst's folder needs
+// administrator rights (Program Files), it runs installTo in an elevated
+// copy of SliceTCI, which shows the Windows UAC prompt.
+func placeExe(src, dst string) error {
+	err := installTo(src, dst)
+	if err == nil || !errors.Is(err, fs.ErrPermission) {
+		return err
+	}
+	return installElevated(src, dst)
+}
+
+// removeLegacyExe deletes the exe an older Install left in the settings
+// folder, once SliceTCI runs from the new install folder.
+func removeLegacyExe(running string) bool {
+	old := legacyExe()
+	if samePath(running, old) || !samePath(running, installedExe()) {
+		return false
+	}
+	os.Remove(old + ".old")
+	return os.Remove(old) == nil
+}
 
 func samePath(a, b string) bool {
 	ca, errA := filepath.Abs(a)

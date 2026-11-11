@@ -2,7 +2,7 @@
 
 A TCI (Transceiver Control Interface) server for FlexRadio on Windows. TCI clients such as WSJT-X connect over a WebSocket on localhost. SliceTCI controls the slice through the SmartSDR TCP API. It takes the audio **directly from the radio** as VITA-49 DAX streams over UDP, so neither SmartSDR DAX nor the Windows DAX sound devices are needed. It is the "one connection instead of CAT + DAX" setup from the TCI requirements draft (v0.1), built as a standalone bridge.
 
-SliceTCI was called FlexTCI up to version 0.5.6. On first start, 0.6.0 moves the settings and logs from `%APPDATA%\FlexTCI` to `%APPDATA%\SliceTCI`. FlexTCI's update check does not find SliceTCI releases, so download 0.6.0 by hand once. Then use **Install in AppData** again and delete the old `FlexTCI` desktop shortcut.
+SliceTCI was called FlexTCI up to version 0.5.6. On first start, 0.6.0 moves the settings and logs from `%APPDATA%\FlexTCI` to `%APPDATA%\SliceTCI`. FlexTCI's update check does not find SliceTCI releases, so download 0.6.0 by hand once. Then use **Install to Program Files** and delete the old `FlexTCI` desktop shortcut.
 
 ![SliceTCI 0.3.0 with WSJT-X 3.0 decoding FT8 on a FLEX-6600M, audio direct from the radio](SliceTCIserver.png)
 
@@ -12,9 +12,9 @@ Download `SliceTCI-<version>.exe` from the [latest release](https://github.com/v
 
 To keep it in one place:
 
-- **Settings > Install in AppData** copies the running exe to `%APPDATA%\SliceTCI\SliceTCI.exe` (the folder that already holds the settings and logs), creates a desktop shortcut and restarts from there. TCI clients reconnect.
+- **Settings > Install to Program Files** copies the running exe to `C:\Program Files\SliceTCI\SliceTCI.exe`, creates a desktop shortcut and restarts from there. Windows shows a UAC prompt for the copy; SliceTCI itself keeps running as a normal user. Settings and logs stay in `%APPDATA%\SliceTCI`. TCI clients reconnect. Up to 0.6.2 Install put the exe in `%APPDATA%\SliceTCI`; after installing to Program Files, that old copy is deleted at the next start.
 - **Settings > Desktop shortcut** only adds a shortcut to the exe that is running.
-- **Settings > Check for updates** compares the running version with the [latest GitHub release](https://github.com/va3mw/SliceTCI/releases/latest). If a newer one exists it asks, then downloads it next to the running exe, checks it against the SHA-256 GitHub published, swaps it in and restarts. The previous exe stays as `SliceTCI.exe.old` until the next start.
+- **Settings > Check for updates** compares the running version with the [latest GitHub release](https://github.com/va3mw/SliceTCI/releases/latest). If a newer one exists it asks, then downloads it to the temp folder, checks it against the SHA-256 GitHub published, swaps it in and restarts. In Program Files the swap needs the same UAC prompt. The previous exe stays as `SliceTCI.exe.old` until the next start (in Program Files, until the next Windows restart).
 
 SliceTCI also checks once at start-up and notes an available update in the log; it never installs without asking. Update checks only work while the repository is public: GitHub answers 404 for a private one, and SliceTCI reports "no public release found".
 
@@ -26,7 +26,7 @@ WSJT-X ──ws://127.0.0.1:50002──┤  SliceTCI (one port  ├── UDP  �
 Log4OM ──ws://127.0.0.1:50001──┘   per slice)         └── UDP  ────► dax_tx stream (whoever is keyed)
 ```
 
-**Audio** comes straight from the radio. SliceTCI registers a UDP port with `client udpport` and opens a `dax_rx` stream for each channel's DAX channel. It opens a `dax_tx` stream for transmit, taking DAX TX ownership with `stream set … tx=1`. RX arrives as float32 stereo at the slice's `sample_rate` (24 kHz on a 6600M) and is resampled to whatever the TCI client asked for. TX goes out in 128-frame packets paced to the TX slice's rate. The streams are recreated after a reconnect. Windows Firewall must allow SliceTCI to receive UDP. Each channel has an RX gain (default −40 dB, which puts WSJT-X near 30 dB), and there is one TX gain.
+**Audio** comes straight from the radio. SliceTCI registers a UDP port with `client udpport` and opens a `dax_rx` stream for each channel's DAX channel. It opens a `dax_tx` stream for transmit, taking DAX TX ownership with `stream set … tx=1`. RX arrives as float32 stereo at the slice's `sample_rate` (24 kHz on a 6600M) and is resampled to whatever the TCI client asked for. TX goes out in 128-frame packets paced to the TX slice's rate. The streams are recreated after a reconnect. Windows Firewall must allow SliceTCI to receive UDP. Each channel has an RX gain (default 0 dB, the same level as the DAX app's RX slider at its default of 50), and there is one TX gain (default −6 dB, the same as DAX TX at 50). Up to 0.6.2 the RX default was −40 dB; a channel whose gain was never changed now starts 40 dB louder, so check the level once after updating.
 
 * **One TCI port per slice, up to 2 slices.** Each channel is a port, a slice letter, a DAX channel and an RX gain. The defaults are Slice A → port 50001 → DAX 1 and Slice B → 50002 → DAX 2. Each WSJT-X or JTDX instance uses **TCI Client RX1** on its own port. A client set to RX2 also works: every receiver index on a port maps to that port's slice.
 * You can run 1 or 2 channels (the default is 1). Several clients can share a port (for example WSJT-X and a logger on the same slice), and they are kept in sync.
@@ -110,7 +110,7 @@ go test ./...          # includes end-to-end tests against a fake radio (TCP API
 
 Both are meant to run on Windows. To build the Windows exe from macOS or Linux, use `wails build -platform windows/amd64 -skipbindings`; skipping bindings is needed because Wails generates them by running the app's Go code on the build machine, and `internal/flex` uses a Windows-only socket option. For the same reason `go test` only compiles on Windows.
 
-Settings are stored in `%APPDATA%\SliceTCI\config.json`.
+Settings are stored in `%APPDATA%\SliceTCI\config.json`. That includes the window's last position, so SliceTCI reopens where it was closed (on any monitor that is still connected; otherwise Windows centres it).
 
 ### Releasing
 
