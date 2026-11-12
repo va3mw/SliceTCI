@@ -176,6 +176,14 @@ input[type=number] { width: 72px; }
       <label><input id="logTraffic" type="checkbox"> Capture TCI/API traffic in the log</label>
     </div>
     <div class="group">
+      <b>WSJT-X</b>
+      <div class="hint" id="wsjtxLine"></div>
+      <div class="slider">
+        <button class="btn" id="btnWsjtx" style="flex:2" title="Put a desktop shortcut for each channel that starts WSJT-X with its own --rig-name (Slice A: SliceA-TCI, and so on). A copy that has no settings yet is set up for TCI on the channel's port, starting from your main WSJT-X settings.">Desktop shortcuts</button>
+        <button class="btn light" id="btnWsjtxFind" style="flex:1" title="Choose which wsjtx.exe the shortcuts start">Find...</button>
+      </div>
+    </div>
+    <div class="group">
       <b>Install &amp; updates</b>
       <div class="hint" id="installLine"></div>
       <button class="btn" id="btnInstall" title="Copy SliceTCI to C:\Program Files\SliceTCI (Windows asks for permission), make a desktop shortcut and restart from there">Install to Program Files</button>
@@ -381,8 +389,12 @@ $("btnSettings").onclick = async () => {
   status = await call("GetStatus");
   renderSettings(status, true);
   renderInstall(await call("GetInstallState"));
+  renderWsjtx(await call("GetWSJTXState"));
   open("setDlg");
 };
+function renderWsjtx(st) {
+  $("wsjtxLine").textContent = st.path ? `One per channel, starting ${st.path}` : "One per channel. WSJT-X is found automatically, or use Find.";
+}
 function renderInstall(st) {
   $("installLine").textContent = `Version ${st.version}, running from ${st.exe}`;
   $("btnInstall").style.display = st.installed ? "none" : "";
@@ -401,6 +413,8 @@ async function installAction(fn, btn) {
 $("btnInstall").onclick = () => installAction("Install", $("btnInstall"));
 $("btnShortcut").onclick = () => installAction("CreateShortcut", $("btnShortcut"));
 $("btnUpdate").onclick = () => installAction("CheckForUpdates", $("btnUpdate"));
+$("btnWsjtx").onclick = async () => { await installAction("CreateWSJTXShortcuts", $("btnWsjtx")); renderWsjtx(await call("GetWSJTXState")); };
+$("btnWsjtxFind").onclick = async () => { await installAction("PickWSJTX", $("btnWsjtxFind")); renderWsjtx(await call("GetWSJTXState")); };
 $("setClose").onclick = () => close("setDlg");
 $("btnConnect").onclick = () => {
   const serial = $("radioSel").value, ip = $("manualIp").value.trim();

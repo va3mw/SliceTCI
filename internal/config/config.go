@@ -98,7 +98,8 @@ type Config struct {
 	Channels     []Channel   `json:"channels"`
 	TXGainDB     int         `json:"tx_gain_db"` // TX audio trim
 	AutoConnect  bool        `json:"auto_connect"`
-	Window       *WindowRect `json:"window,omitempty"` // last window position; nil = centred
+	Window       *WindowRect `json:"window,omitempty"`     // last window position; nil = centred
+	WSJTXPath    string      `json:"wsjtx_path,omitempty"` // wsjtx.exe for the desktop shortcuts
 	Options
 }
 
