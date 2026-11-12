@@ -20,6 +20,8 @@ SliceTCI also checks once at start-up and notes an available update in the log; 
 
 ### Running several copies of WSJT-X
 
+Step-by-step guide: [Detailed instructions for multiple WSJT-X copies](multiple-wsjtx.md).
+
 Several copies of WSJT-X can run at the same time by starting each with the `--rig-name` switch, as explained in the WSJT-X user documentation. Each copy must use its own TCI port, one per slice: for example Slice A on `127.0.0.1:50001`, Slice B on `127.0.0.1:50002`, and so on. Add a SliceTCI channel for each slice first.
 
 **Settings > WSJT-X > Desktop shortcuts** does this for you. For each channel it puts a shortcut on the desktop, `WSJT-X A TCI` and so on, that starts `wsjtx.exe --rig-name=SliceA-TCI` (`SliceB-TCI` for Slice B, and so on). SliceTCI finds WSJT-X through its installer entry or in `C:\WSJT\wsjtx\bin`; if it cannot, or you have more than one, it asks. **Find...** changes which `wsjtx.exe` is used. Each copy keeps its own settings in `%LOCALAPPDATA%\WSJT-X - SliceA-TCI`. If a copy has no settings yet, SliceTCI creates them from your main WSJT-X settings (callsign, grid and the rest) and sets them up for TCI: Rig **TCI Client RX1**, TCI Server `127.0.0.1:<the channel's port>`, TCI audio, PTT **CAT**, Mode and Split **None**. A copy that already has settings is left alone; if its TCI Server does not match the channel's port, SliceTCI says so. Add channels first, then click the button again to get shortcuts for the new ones.
