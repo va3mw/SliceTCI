@@ -342,18 +342,19 @@ func (c *client) dispatch(cmd tci.Command) {
 		}
 		c.sendText(tci.Fmt("vfo", 0, a[1], ch.currentView().Freq))
 	case "dds":
-		// The panadapter centre is not exposed separately: DDS and VFO A
-		// both mean the slice frequency. Some clients tune with DDS (Hamlib
-		// sends DDS then VFO), so a DDS set must tune or they wait.
+		// DDS is documented (and advertised to clients) as read-only: it
+		// must echo without retuning the radio. JTDX's "Fake It" split sends
+		// DDS sets to nudge its own TX audio centering without touching the
+		// real VFO; tuning on these (as this code used to, and as Hamlib's
+		// "DDS then VFO" sequencing originally motivated) made the rig's
+		// actual frequency creep with every nudge. Acknowledge the set to
+		// the sender only, without changing the shared view or the radio:
+		// Hamlib clients still get a real tune from the VFO set that
+		// follows.
 		if len(a) >= 2 {
 			if hz, err := strconv.ParseInt(a[1], 10, 64); err == nil && hz > 0 {
-				if idx := needSlice(); idx >= 0 {
-					if hz != v.Freq {
-						b.radio.Tune(idx, hz, b.resyncOnError(ch))
-					}
-					ch.pinAndBroadcast(c, "freq", hz, freqLines(hz)...)
-					return
-				}
+				c.sendText(tci.Fmt("dds", 0, hz))
+				return
 			}
 		}
 		c.sendText(tci.Fmt("dds", 0, ch.currentView().Freq))
